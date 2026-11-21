@@ -25,7 +25,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Hd
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -151,42 +158,59 @@ fun HomeScreen(
                 .fillMaxWidth()
                 .height(56.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color(0xFF121318))
-                .border(1.dp, Color(0xFF3A3E49), RoundedCornerShape(18.dp))
+                .background(Color(0xFF132036))
+                .border(1.dp, Color(0xFF24406A), RoundedCornerShape(18.dp))
                 .clickable {
                     picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                },
-            horizontalArrangement = Arrangement.Center,
+                }
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.FileDownload, contentDescription = null, tint = C.Text)
-            Spacer(Modifier.width(10.dp))
-            Text("Importovať z galérie telefónu", color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Box(
+                Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF1D3352)),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Filled.FileDownload, contentDescription = null, tint = C.Blue, modifier = Modifier.size(20.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "Importovať z galérie telefónu", color = Color(0xFFB9D3FF), fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color(0xFFB9D3FF))
         }
 
-        // rýchle nastavenia (ťuknutím sa prepínajú)
-        Spacer(Modifier.height(16.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val resLabel = if (settings.resolution == 0) "Natívne" else "${settings.resolution}p"
-            Chip(resLabel) {
+        // rýchle nastavenia (ťuknutím sa prepínajú) – farebné dlaždice 2×2
+        Spacer(Modifier.height(12.dp))
+        val resLabel = if (settings.resolution == 0) "Natívne" else "${settings.resolution}p"
+        val audioLabel = when (settings.audio) {
+            1 -> "Mikrofón"
+            2 -> "Systém"
+            3 -> "Systém + mikrofón"
+            else -> "Bez zvuku"
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingTile("Rozlíšenie", resLabel, Icons.Filled.Hd, TileViolet, Modifier.weight(1f)) {
                 val next = when (settings.resolution) { 720 -> 1080; 1080 -> 1440; 1440 -> 0; else -> 720 }
                 update(settings.copy(resolution = next))
             }
-            Chip("${settings.fps} FPS") {
+            SettingTile("Snímky/s", "${settings.fps} FPS", Icons.Filled.Speed, TileTeal, Modifier.weight(1f)) {
                 val next = when (settings.fps) { 24 -> 30; 30 -> 60; else -> 24 }
                 update(settings.copy(fps = next))
             }
-            val audioLabel = when (settings.audio) {
-                1 -> "Zvuk: mikrofón"
-                2 -> "Zvuk: systém"
-                3 -> "Zvuk: systém + mikrofón"
-                else -> "Bez zvuku"
-            }
-            Chip(audioLabel) {
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingTile(
+                "Zvuk", audioLabel,
+                if (settings.anyAudio) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                TileAmber, Modifier.weight(1f)
+            ) {
                 val next = when (settings.audio) { 2 -> 3; 3 -> 1; 1 -> 0; else -> 2 }
                 update(settings.copy(audio = next))
             }
-            Chip(if (settings.countdown == 0) "Bez odpočtu" else "Odpočet ${settings.countdown} s") {
+            SettingTile(
+                "Odpočet", if (settings.countdown == 0) "Vypnutý" else if (settings.countdown == 5) "5 sekúnd" else "${settings.countdown} sekundy",
+                Icons.Filled.Timer, TilePink, Modifier.weight(1f)
+            ) {
                 val next = when (settings.countdown) { 0 -> 3; 3 -> 5; else -> 0 }
                 update(settings.copy(countdown = next))
             }
@@ -211,8 +235,8 @@ fun HomeScreen(
             Column(Modifier.weight(1f)) {
                 Text("Čistý záznam", color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Nič neprekrýva obrazovku. Ovládanie v notifikácii, v rýchlych nastaveniach" +
-                        if (settings.shakeToStop) " alebo zatrasením (stop)." else ".",
+                    if (settings.shakeToStop) "Nič neprekrýva obrazovku · zatrasenie = stop"
+                    else "Nič neprekrýva obrazovku · stop v notifikácii",
                     color = C.TextDim, fontSize = 12.sp, lineHeight = 16.sp
                 )
             }
@@ -348,5 +372,46 @@ private fun Chip(label: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Text(label, color = Color(0xFFE3E5E9), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+private class TileColors(val bg: Color, val border: Color, val iconBg: Color, val fg: Color)
+
+private val TileViolet = TileColors(Color(0xFF1C1929), Color(0xFF2F2950), Color(0xFF2A2447), Color(0xFFC9B8FF))
+private val TileTeal = TileColors(Color(0xFF142425), Color(0xFF21403F), Color(0xFF1C3636), Color(0xFF8FE0D2))
+private val TileAmber = TileColors(Color(0xFF251F14), Color(0xFF43361C), Color(0xFF3A2F18), Color(0xFFFFD27A))
+private val TilePink = TileColors(Color(0xFF261823), Color(0xFF45293C), Color(0xFF3A2234), Color(0xFFFFA3C8))
+
+@Composable
+private fun SettingTile(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    colors: TileColors,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier
+            .height(58.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.bg)
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(colors.iconBg),
+            contentAlignment = Alignment.Center
+        ) { Icon(icon, contentDescription = null, tint = colors.fg, modifier = Modifier.size(20.dp)) }
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(label, color = C.TextDim, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            Text(
+                value, color = colors.fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
