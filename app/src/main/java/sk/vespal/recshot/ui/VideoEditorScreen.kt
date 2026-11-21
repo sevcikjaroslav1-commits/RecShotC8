@@ -400,7 +400,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
         // časy
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp)) {
             Text(
-                if (scrubbing) "Strih na ${formatDuration(positionMs)}"
+                if (scrubbing) "Strih na ${formatPrecise(positionMs)}"
                 else "${formatDuration((positionMs / speed).toLong())} / ${formatDuration(resultMs)}",
                 color = if (scrubbing) C.Trim else C.Text,
                 fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
@@ -424,9 +424,16 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             RangeSlider(
                 value = range,
                 onValueChange = { r ->
-                    val moved = if (r.start != range.start) r.start else r.endInclusive
-                    range = r
-                    if (durationMs > 0) showFull((moved * durationMs).toLong())
+                    if (durationMs <= 0) {
+                        range = r
+                    } else {
+                        // prichytenie na 0,1 s
+                        fun snap(f: Float): Float = (Math.round(f * durationMs / 100.0) * 100.0 / durationMs).toFloat().coerceIn(0f, 1f)
+                        val startChanged = r.start != range.start
+                        val snapped = snap(r.start)..snap(r.endInclusive)
+                        range = snapped
+                        showFull(((if (startChanged) snapped.start else snapped.endInclusive) * durationMs).toLong())
+                    }
                 },
                 onValueChangeFinished = { showResult() },
                 valueRange = 0f..1f,
@@ -463,9 +470,29 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             when (tool) {
-                VTool.CUT -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ModeButton("Ponechať výber", !cutMiddle, Modifier.weight(1f)) { cutMiddle = false }
-                    ModeButton("Vystrihnúť výber", cutMiddle, Modifier.weight(1f)) { cutMiddle = true }
+                VTool.CUT -> Column {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ModeButton("Ponechať výber", !cutMiddle, Modifier.weight(1f)) { cutMiddle = false }
+                        ModeButton("Vystrihnúť výber", cutMiddle, Modifier.weight(1f)) { cutMiddle = true }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    // jemné doladenie po 0,1 s
+                    fun nudge(isStart: Boolean, deltaMs: Long) {
+                        if (durationMs <= 0) return
+                        val minGap = 200L
+                        if (isStart) {
+                            val ms = (startMs + deltaMs).coerceIn(0L, endMs - minGap)
+                            range = (ms.toFloat() / durationMs)..range.endInclusive
+                            showFull(ms)
+                        } else {
+                            val ms = (endMs + deltaMs).coerceIn(startMs + minGap, durationMs)
+                            range = range.start..(ms.toFloat() / durationMs)
+                            showFull(ms)
+                        }
+                    }
+                    NudgeRow("Začiatok", formatPrecise(startMs), { nudge(true, -100) }, { nudge(true, 100) })
+                    Spacer(Modifier.height(6.dp))
+                    NudgeRow("Koniec", formatPrecise(endMs), { nudge(false, -100) }, { nudge(false, 100) })
                 }
 
                 VTool.SPEED -> Row(
@@ -842,3 +869,38 @@ private class GainAudioProcessor(private val gain: Float) : BaseAudioProcessor()
 }
 
 private const val C_PCM16 = androidx.media3.common.C.ENCODING_PCM_16BIT
+
+/** Čas s desatinou sekundy, napr. 0:12,4 */
+fun formatPrecise(ms: Long): String {
+    val t = ms.coerceAtLeast(0)
+    val totalTenths = (t + 50) / 100
+    val sec = totalTenths / 10
+    return "%d:%02d,%d".format(sec / 60, sec % 60, totalTenths % 10)
+}
+
+@Composable
+private fun NudgeRow(label: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = C.TextDim, fontSize = 13.sp, modifier = Modifier.width(70.dp))
+        Text(value, color = C.Trim, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        NudgeButton("−0,1 s", onMinus)
+        Spacer(Modifier.width(8.dp))
+        NudgeButton("+0,1 s", onPlus)
+    }
+}
+
+@Composable
+private fun NudgeButton(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(C.SurfaceHi)
+            .border(1.dp, C.Border, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
