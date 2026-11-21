@@ -1,0 +1,73 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Zostaviť debug APK (na inštaláciu do telefónu)
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Premenovať APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk RecShotC8-${{ github.run_number }}-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RecShotC8-debug-apk
+          path: RecShotC8-${{ github.run_number }}-debug.apk
+
+      - name: Zostaviť podpísaný AAB pre Google Play
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          RECSHOT_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RECSHOT_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RECSHOT_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          export RECSHOT_KEYSTORE="$RUNNER_TEMP/upload.jks"
+          gradle :app:bundleRelease --stacktrace
+          cp app/build/outputs/bundle/release/app-release.aab RecShotC8-${{ github.run_number }}.aab
+
+      - uses: actions/upload-artifact@v4
+        if: env.KEYSTORE_BASE64 != ''
+        with:
+          name: RecShotC8-play-aab
+          path: RecShotC8-${{ github.run_number }}.aab
+
+      - name: Zverejniť v Releases (stiahnutie priamo do telefónu)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: RecShotC8 1.0.${{ github.run_number }}
+          prerelease: false
+          make_latest: true
+          body: |
+            Nainštaluj **RecShotC8-${{ github.run_number }}-debug.apk** do telefónu.
+            Súbor .aab (ak je priložený) je pre Google Play Console.
+          files: |
+            RecShotC8-${{ github.run_number }}-debug.apk
+            RecShotC8-${{ github.run_number }}.aab
+          fail_on_unmatched_files: false
