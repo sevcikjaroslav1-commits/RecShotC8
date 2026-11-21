@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
@@ -171,6 +172,11 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
     var progress by remember { mutableFloatStateOf(0f) }
     var transformer by remember { mutableStateOf<Transformer?>(null) }
 
+    // náhľad: true = prehráva sa celé pôvodné video (počas ťahania úchytov),
+    // false = prehráva sa presne výsledok strihu (zostrihané úseky za sebou)
+    var scrubbing by remember { mutableStateOf(false) }
+    var segments by remember { mutableStateOf<List<LongRange>>(emptyList()) }
+
     val musicPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { picked ->
         if (picked != null) {
             musicUri = picked
@@ -188,17 +194,66 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
     LaunchedEffect(speed) { player.setPlaybackSpeed(speed) }
 
     // pozícia, prehrávanie len vo výbere, priebeh exportu
+    val startMs = (range.start * durationMs).toLong()
+    val endMs = (range.endInclusive * durationMs).toLong()
+
+    /** Úseky, ktoré ostanú vo výslednom videu. */
+    fun keptSegments(): List<LongRange> {
+        if (durationMs <= 0) return emptyList()
+        return if (!cutMiddle) {
+            listOf(startMs until endMs)
+        } else {
+            buildList {
+                if (startMs > 200) add(0L until startMs)
+                if (endMs < durationMs - 200) add(endMs until durationMs)
+            }
+        }
+    }
+
+    /** Nahrá do prehrávača presne výsledok strihu a nastaví sa na jeho začiatok. */
+    fun showResult() {
+        val segs = keptSegments()
+        segments = segs
+        scrubbing = false
+        if (segs.isEmpty()) return
+        val items = segs.map { r ->
+            val c = MediaItem.ClippingConfiguration.Builder().setStartPositionMs(r.first)
+            if (r.last + 1 < durationMs) c.setEndPositionMs(r.last + 1)
+            MediaItem.Builder().setUri(uri).setClippingConfiguration(c.build()).build()
+        }
+        player.pause()
+        player.setMediaItems(items)
+        player.prepare()
+        player.seekTo(0, 0L)
+    }
+
+    /** Počas ťahania úchytov zobrazuje celé pôvodné video, aby bolo vidno presné miesto strihu. */
+    fun showFull(atMs: Long) {
+        if (!scrubbing) {
+            scrubbing = true
+            player.pause()
+            player.setMediaItem(MediaItem.fromUri(uri))
+            player.prepare()
+        }
+        player.seekTo(atMs)
+    }
+
+    // po načítaní dĺžky a pri zmene režimu strihu ukáž výsledok
+    LaunchedEffect(durationMs, cutMiddle) {
+        if (durationMs > 0) showResult()
+    }
+    LaunchedEffect(removeAudio) { player.volume = if (removeAudio) 0f else 1f }
+
+    // pozícia vo výslednom videu + priebeh exportu
     LaunchedEffect(player) {
         while (true) {
-            positionMs = player.currentPosition
             playing = player.isPlaying
-            if (durationMs > 0 && !cutMiddle) {
-                val s = (range.start * durationMs).toLong()
-                val e = (range.endInclusive * durationMs).toLong()
-                if (player.isPlaying && positionMs >= e) {
-                    player.pause()
-                    player.seekTo(s)
-                }
+            positionMs = if (scrubbing) {
+                player.currentPosition
+            } else {
+                val idx = player.currentMediaItemIndex
+                val before = segments.take(idx).sumOf { it.last + 1 - it.first }
+                before + player.currentPosition
             }
             transformer?.let { t ->
                 val holder = ProgressHolder()
@@ -210,8 +265,6 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
         }
     }
 
-    val startMs = (range.start * durationMs).toLong()
-    val endMs = (range.endInclusive * durationMs).toLong()
     val keptMs = if (cutMiddle) durationMs - (endMs - startMs) else endMs - startMs
     val resultMs = (keptMs / speed).toLong()
 
@@ -309,9 +362,8 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                         if (player.isPlaying) {
                             player.pause()
                         } else {
-                            if (durationMs > 0 && !cutMiddle && (positionMs < startMs || positionMs >= endMs)) {
-                                player.seekTo(startMs)
-                            }
+                            if (scrubbing) showResult()
+                            if (player.playbackState == Player.STATE_ENDED) player.seekTo(0, 0L)
                             player.play()
                         }
                     },
@@ -327,9 +379,14 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
 
         // časy
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp)) {
-            Text(formatDuration(positionMs), color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text(
-                "Výsledok: ${formatDuration(resultMs)} z ${formatDuration(durationMs)}",
+                if (scrubbing) "Strih na ${formatDuration(positionMs)}"
+                else "${formatDuration((positionMs / speed).toLong())} / ${formatDuration(resultMs)}",
+                color = if (scrubbing) C.Trim else C.Text,
+                fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
+            )
+            Text(
+                if (scrubbing) "Pusti ▶ pre náhľad výsledku" else "Náhľad výsledku",
                 color = C.TextDim, fontSize = 13.sp
             )
         }
@@ -349,8 +406,9 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                 onValueChange = { r ->
                     val moved = if (r.start != range.start) r.start else r.endInclusive
                     range = r
-                    if (durationMs > 0) player.seekTo((moved * durationMs).toLong())
+                    if (durationMs > 0) showFull((moved * durationMs).toLong())
                 },
+                onValueChangeFinished = { showResult() },
                 valueRange = 0f..1f,
                 colors = SliderDefaults.colors(
                     thumbColor = C.Trim,
