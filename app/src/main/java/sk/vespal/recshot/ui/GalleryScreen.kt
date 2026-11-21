@@ -1,6 +1,19 @@
 package sk.vespal.recshot.ui
 
+import android.app.RecoverableSecurityException
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.result.IntentSenderRequest
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.mutableStateListOf
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,6 +78,60 @@ fun GalleryScreen(
     var filter by rememberSaveable { mutableIntStateOf(0) } // 0 všetko, 1 videá, 2 fotky
     var allItems by remember { mutableStateOf<List<GalleryItem>>(emptyList()) }
     val saved by RecorderService.savedCounter.collectAsState()
+    val selected = remember { mutableStateListOf<Uri>() }
+    val selecting = selected.isNotEmpty()
+    val scope = rememberCoroutineScope()
+
+    fun refresh() {
+        RecorderService.savedCounter.value = RecorderService.savedCounter.value + 1
+    }
+
+    // systémové potvrdenie mazania (Android 11+) alebo povolenie pre cudzí súbor (Android 10)
+    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        if (res.resultCode == android.app.Activity.RESULT_OK) {
+            Toast.makeText(ctx, "Vymazané", Toast.LENGTH_SHORT).show()
+            selected.clear()
+        }
+        refresh()
+    }
+
+    fun deleteSelected() {
+        val uris = selected.toList()
+        if (uris.isEmpty()) return
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val pi = MediaStore.createDeleteRequest(ctx.contentResolver, uris)
+                deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "Mazanie sa nepodarilo", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            scope.launch {
+                var pending: RecoverableSecurityException? = null
+                var count = 0
+                withContext(Dispatchers.IO) {
+                    for (u in uris) {
+                        try {
+                            count += ctx.contentResolver.delete(u, null, null)
+                        } catch (e: RecoverableSecurityException) {
+                            if (pending == null) pending = e
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                val p = pending
+                if (p != null) {
+                    deleteLauncher.launch(IntentSenderRequest.Builder(p.userAction.actionIntent.intentSender).build())
+                } else {
+                    Toast.makeText(ctx, "Vymazané: $count", Toast.LENGTH_SHORT).show()
+                    selected.clear()
+                    refresh()
+                }
+            }
+        }
+    }
+
+    BackHandler(enabled = selecting) { selected.clear() }
 
     LaunchedEffect(saved) {
         allItems = withContext(Dispatchers.IO) { MediaStoreUtil.list(ctx) }
@@ -82,10 +149,38 @@ fun GalleryScreen(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-            Text(
-                "Galéria", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 16.dp, bottom = 14.dp)
-            )
+            if (!selecting) {
+                Text(
+                    "Galéria", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 14.dp)
+                )
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { selected.clear() }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Zrušiť výber", tint = C.Text)
+                    }
+                    Text(
+                        "Vybraté: ${selected.size}", color = C.Text, fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        val visible = when (filter) {
+                            1 -> allItems.filter { it.isVideo }
+                            2 -> allItems.filter { !it.isVideo }
+                            else -> allItems
+                        }
+                        visible.forEach { if (it.uri !in selected) selected.add(it.uri) }
+                    }) {
+                        Icon(Icons.Filled.SelectAll, contentDescription = "Vybrať všetko", tint = C.Text)
+                    }
+                    IconButton(onClick = { deleteSelected() }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Vymazať", tint = C.AccentText)
+                    }
+                }
+            }
 
             // záložky
             Row(
@@ -112,6 +207,12 @@ fun GalleryScreen(
                     2 -> allItems.filter { !it.isVideo }
                     else -> allItems
                 }
+                if (shown.isNotEmpty() && !selecting) {
+                    Text(
+                        "Podrž prst na položke pre označenie a vymazanie",
+                        color = C.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
                 if (shown.isEmpty()) {
                     Text(
                         "Tu sa zobrazia tvoje nahrávky a snímky obrazovky.",
@@ -126,7 +227,20 @@ fun GalleryScreen(
                         modifier = Modifier.fillMaxWidth().weight(1f)
                     ) {
                         items(shown, key = { it.uri.toString() }) { item ->
-                            Thumb(item, Modifier.aspectRatio(0.66f)) { onOpen(item) }
+                            val isSel = item.uri in selected
+                            Thumb(
+                                item,
+                                Modifier.aspectRatio(0.66f),
+                                selected = isSel,
+                                selecting = selecting,
+                                onLongClick = { if (!isSel) selected.add(item.uri) },
+                            ) {
+                                if (selecting) {
+                                    if (isSel) selected.remove(item.uri) else selected.add(item.uri)
+                                } else {
+                                    onOpen(item)
+                                }
+                            }
                         }
                     }
                 }
@@ -158,7 +272,7 @@ fun GalleryScreen(
             }
         }
 
-        ExtendedFloatingActionButton(
+        if (!selecting) ExtendedFloatingActionButton(
             onClick = { pick(ActivityResultContracts.PickVisualMedia.ImageAndVideo) },
             containerColor = C.Accent,
             contentColor = Color.White,

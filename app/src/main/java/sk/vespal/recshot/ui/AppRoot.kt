@@ -6,6 +6,10 @@ import android.net.Uri
 import android.util.Size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -114,8 +118,16 @@ private fun openItem(item: GalleryItem, onNavigate: (Screen) -> Unit) {
 }
 
 /** Náhľad položky galérie (načítaný z MediaStore na pozadí). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun Thumb(item: GalleryItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun Thumb(
+    item: GalleryItem,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    selecting: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     val ctx = LocalContext.current
     var bmp by remember(item.uri) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(item.uri) {
@@ -131,11 +143,32 @@ fun Thumb(item: GalleryItem, modifier: Modifier = Modifier, onClick: () -> Unit)
         modifier
             .clip(RoundedCornerShape(12.dp))
             .background(C.SurfaceHi)
-            .border(1.dp, Color(0xFF22252D), RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .border(
+                if (selected) 3.dp else 1.dp,
+                if (selected) C.Accent else Color(0xFF22252D),
+                RoundedCornerShape(12.dp)
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         bmp?.let {
             Image(bitmap = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        if (selected) {
+            Box(Modifier.fillMaxSize().background(Color(0x55E8462A)))
+        }
+        if (selecting) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) C.Accent else Color(0x99000000))
+                    .border(2.dp, Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) Icon(Icons.Filled.Check, contentDescription = "Vybraté", tint = Color.White, modifier = Modifier.size(16.dp))
+            }
         }
         Row(
             Modifier
