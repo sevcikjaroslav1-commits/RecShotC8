@@ -1,5 +1,6 @@
 package sk.vespal.recshot.ui
 
+import sk.vespal.recshot.tr
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -114,7 +115,8 @@ fun HomeScreen(
                 Box(Modifier.size(14.dp).clip(CircleShape).background(Color.White))
             }
             Spacer(Modifier.width(10.dp))
-            Text("RecShotC8", color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("RecShotC8", color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            LangSwitch()
         }
 
         // hlavné tlačidlá
@@ -122,8 +124,8 @@ fun HomeScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (recording == null) {
                 BigTile(
-                    title = if (rec == RecState.Starting) "Spúšťam…" else "Nahrať",
-                    subtitle = "celú obrazovku",
+                    title = if (rec == RecState.Starting) tr("Spúšťam…", "Starting…") else tr("Nahrať", "Record"),
+                    subtitle = tr("celú obrazovku", "full screen"),
                     icon = Icons.Filled.FiberManualRecord,
                     filled = true,
                     modifier = Modifier.weight(1f),
@@ -131,15 +133,15 @@ fun HomeScreen(
             } else {
                 BigTile(
                     title = "Stop",
-                    subtitle = if (recording.paused) "pozastavené" else "uložiť video",
+                    subtitle = if (recording.paused) tr("pozastavené", "paused") else tr("uložiť video", "save video"),
                     icon = Icons.Filled.Stop,
                     filled = true,
                     modifier = Modifier.weight(1f),
                 ) { RecorderService.command(ctx, RecorderService.ACTION_STOP) }
             }
             BigTile(
-                title = "Snímka",
-                subtitle = if (rec == RecState.ShotSession) "režim zapnutý" else "obrazovky",
+                title = tr("Snímka", "Screenshot"),
+                subtitle = if (rec == RecState.ShotSession) tr("režim zapnutý", "mode on") else tr("obrazovky", "screen"),
                 icon = Icons.Filled.Screenshot,
                 filled = true,
                 color = C.BlueFill,
@@ -177,7 +179,7 @@ fun HomeScreen(
             ) { Icon(Icons.Filled.FileDownload, contentDescription = null, tint = C.Blue, modifier = Modifier.size(20.dp)) }
             Spacer(Modifier.width(12.dp))
             Text(
-                "Importovať z galérie telefónu", color = Color(0xFFB9D3FF), fontSize = 15.sp,
+                tr("Importovať z galérie telefónu", "Import from phone gallery"), color = Color(0xFFB9D3FF), fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
             )
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color(0xFFB9D3FF))
@@ -185,19 +187,19 @@ fun HomeScreen(
 
         // rýchle nastavenia (ťuknutím sa prepínajú) – farebné dlaždice 2×2
         Spacer(Modifier.height(12.dp))
-        val resLabel = if (settings.resolution == 0) "Natívne" else "${settings.resolution}p"
+        val resLabel = if (settings.resolution == 0) tr("Natívne", "Native") else "${settings.resolution}p"
         val audioLabel = when (settings.audio) {
-            1 -> "Mikrofón"
-            2 -> "Systém"
-            3 -> "Systém + mikrofón"
-            else -> "Bez zvuku"
+            1 -> tr("Mikrofón", "Microphone")
+            2 -> tr("Systém", "System")
+            3 -> tr("Systém + mikrofón", "System + mic")
+            else -> tr("Bez zvuku", "No sound")
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SettingTile("Rozlíšenie", resLabel, Icons.Filled.Hd, TileViolet, Modifier.weight(1f)) {
+            SettingTile(tr("Rozlíšenie", "Resolution"), resLabel, Icons.Filled.Hd, TileViolet, Modifier.weight(1f)) {
                 val next = when (settings.resolution) { 720 -> 1080; 1080 -> 1440; 1440 -> 0; else -> 720 }
                 update(settings.copy(resolution = next))
             }
-            SettingTile("Snímky/s", "${settings.fps} FPS", Icons.Filled.Speed, TileTeal, Modifier.weight(1f)) {
+            SettingTile(tr("Snímky/s", "Frame rate"), "${settings.fps} FPS", Icons.Filled.Speed, TileTeal, Modifier.weight(1f)) {
                 val next = when (settings.fps) { 24 -> 30; 30 -> 60; else -> 24 }
                 update(settings.copy(fps = next))
             }
@@ -205,7 +207,7 @@ fun HomeScreen(
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingTile(
-                "Zvuk", audioLabel,
+                tr("Zvuk", "Sound"), audioLabel,
                 if (settings.anyAudio) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
                 TileAmber, Modifier.weight(1f)
             ) {
@@ -213,7 +215,7 @@ fun HomeScreen(
                 update(settings.copy(audio = next))
             }
             SettingTile(
-                "Odpočet", if (settings.countdown == 0) "Vypnutý" else if (settings.countdown == 5) "5 sekúnd" else "${settings.countdown} sekundy",
+                tr("Odpočet", "Countdown"), if (settings.countdown == 0) tr("Vypnutý", "Off") else if (settings.countdown == 5) tr("5 sekúnd", "5 seconds") else tr("${settings.countdown} sekundy", "${settings.countdown} seconds"),
                 Icons.Filled.Timer, TilePink, Modifier.weight(1f)
             ) {
                 val next = when (settings.countdown) { 0 -> 3; 3 -> 5; else -> 0 }
@@ -226,15 +228,15 @@ fun HomeScreen(
             Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Posledné", color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(tr("Posledné", "Recent"), color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text(
-                "Zobraziť všetko", color = C.AccentText, fontSize = 13.sp,
+                tr("Zobraziť všetko", "Show all"), color = C.AccentText, fontSize = 13.sp,
                 modifier = Modifier.clickable(onClick = onShowAll).padding(8.dp)
             )
         }
         if (recent.isEmpty()) {
             Text(
-                "Zatiaľ žiadne nahrávky. Ťukni na Nahrať alebo Snímka.",
+                tr("Zatiaľ žiadne nahrávky. Ťukni na Nahrať alebo Snímka.", "No recordings yet. Tap Record or Screenshot."),
                 color = C.TextDim, fontSize = 13.sp, modifier = Modifier.padding(bottom = 24.dp)
             )
         } else {
@@ -272,7 +274,7 @@ private fun RecordingBar(s: RecState.Recording) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(if (s.paused) C.TextDim else C.Accent))
         Spacer(Modifier.width(10.dp))
         Text(
-            if (s.paused) "Pozastavené" else "Nahráva sa  " + formatDuration(now - s.startedAt),
+            if (s.paused) tr("Pozastavené", "Paused") else tr("Nahráva sa  ", "Recording  ") + formatDuration(now - s.startedAt),
             color = C.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
         )
         Box(
@@ -290,7 +292,7 @@ private fun RecordingBar(s: RecState.Recording) {
         ) {
             Icon(
                 if (s.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                contentDescription = if (s.paused) "Pokračovať" else "Pauza",
+                contentDescription = if (s.paused) tr("Pokračovať", "Resume") else tr("Pauza", "Pause"),
                 tint = Color.White
             )
         }
@@ -347,14 +349,14 @@ private fun ShotSessionBar() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Režim snímok je zapnutý", color = Color(0xFFB9D3FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(tr("Režim snímok je zapnutý", "Screenshot mode is on"), color = Color(0xFFB9D3FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                "Prejdi do inej aplikácie a ťukni na modré plávajúce tlačidlo.",
+                tr("Prejdi do inej aplikácie a ťukni na modré plávajúce tlačidlo.", "Go to another app and tap the blue floating button."),
                 color = C.TextDim, fontSize = 12.sp, lineHeight = 16.sp
             )
         }
         Text(
-            "Ukončiť", color = C.AccentText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            tr("Ukončiť", "End"), color = C.AccentText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
                 .clickable { RecorderService.command(ctx, RecorderService.ACTION_STOP) }

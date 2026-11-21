@@ -73,7 +73,7 @@ class FloatingShotButton(
                 setStroke(dp(3), Color.argb(230, 255, 255, 255))
             }
             elevation = dp(6).toFloat()
-            contentDescription = "Odfotiť obrazovku"
+            contentDescription = tr("Odfotiť obrazovku", "Take screenshot")
         }
         val icon = ImageView(context).apply {
             setImageResource(R.drawable.ic_shot)

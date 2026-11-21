@@ -28,20 +28,22 @@ private fun TileService.launchMain(action: String, req: Int, cls: Class<*> = Mai
 /** Dlaždica „Nahrať obrazovku“ – štart / stop nahrávania bez otvárania aplikácie. */
 class RecordTileService : TileService() {
     override fun onStartListening() {
+        Lang.init(this)
         val tile = qsTile ?: return
         val recording = RecorderService.state.value is RecState.Recording
         tile.state = if (recording) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = if (recording) "Zastaviť nahrávanie" else getString(R.string.tile_record)
+        tile.label = if (recording) tr("Zastaviť nahrávanie", "Stop recording") else tr("Nahrať obrazovku", "Record screen")
         tile.updateTile()
     }
 
     override fun onClick() {
+        Lang.init(this)
         when (RecorderService.state.value) {
             is RecState.Recording, RecState.Starting -> {
                 RecorderService.command(this, RecorderService.ACTION_STOP)
                 qsTile?.let {
                     it.state = Tile.STATE_INACTIVE
-                    it.label = getString(R.string.tile_record)
+                    it.label = tr("Nahrať obrazovku", "Record screen")
                     it.updateTile()
                 }
             }
@@ -53,13 +55,16 @@ class RecordTileService : TileService() {
 /** Dlaždica „Snímka obrazovky“. Počas nahrávania urobí snímku z bežiaceho záznamu. */
 class ShotTileService : TileService() {
     override fun onStartListening() {
+        Lang.init(this)
         qsTile?.let {
             it.state = Tile.STATE_INACTIVE
+            it.label = tr("Snímka obrazovky", "Screenshot")
             it.updateTile()
         }
     }
 
     override fun onClick() {
+        Lang.init(this)
         val st = RecorderService.state.value
         if (st is RecState.Recording || st == RecState.ShotSession) {
             launchMain("shot", 101, ShotTrampolineActivity::class.java)

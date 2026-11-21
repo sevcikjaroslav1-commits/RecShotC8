@@ -1,5 +1,6 @@
 package sk.vespal.recshot.ui
 
+import sk.vespal.recshot.tr
 import android.app.RecoverableSecurityException
 import android.net.Uri
 import android.os.Build
@@ -92,7 +93,7 @@ fun GalleryScreen(
     // systémové potvrdenie mazania (Android 11+) alebo povolenie pre cudzí súbor (Android 10)
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
         if (res.resultCode == android.app.Activity.RESULT_OK) {
-            Toast.makeText(ctx, "Vymazané", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, tr("Vymazané", "Deleted"), Toast.LENGTH_SHORT).show()
             selected.clear()
         }
         refresh()
@@ -106,7 +107,7 @@ fun GalleryScreen(
                 val pi = MediaStore.createDeleteRequest(ctx.contentResolver, uris)
                 deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
             } catch (e: Exception) {
-                Toast.makeText(ctx, "Mazanie sa nepodarilo", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, tr("Mazanie sa nepodarilo", "Delete failed"), Toast.LENGTH_SHORT).show()
             }
         } else {
             scope.launch {
@@ -126,7 +127,7 @@ fun GalleryScreen(
                 if (p != null) {
                     deleteLauncher.launch(IntentSenderRequest.Builder(p.userAction.actionIntent.intentSender).build())
                 } else {
-                    Toast.makeText(ctx, "Vymazané: $count", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, tr("Vymazané: $count", "Deleted: $count"), Toast.LENGTH_SHORT).show()
                     selected.clear()
                     refresh()
                 }
@@ -169,7 +170,7 @@ fun GalleryScreen(
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             if (!selecting) {
                 Text(
-                    "Galéria", color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold,
+                    tr("Galéria", "Gallery"), color = C.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 16.dp, bottom = 14.dp)
                 )
             } else {
@@ -178,7 +179,7 @@ fun GalleryScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { selected.clear() }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Zrušiť výber", tint = C.Text)
+                        Icon(Icons.Filled.Close, contentDescription = tr("Zrušiť výber", "Clear selection"), tint = C.Text)
                     }
                     Text(
                         "${selected.size}", color = C.Text, fontSize = 18.sp,
@@ -192,22 +193,22 @@ fun GalleryScreen(
                         }
                         visible.forEach { if (it.uri !in selected) selected.add(it.uri) }
                     }) {
-                        Icon(Icons.Filled.SelectAll, contentDescription = "Vybrať všetko", tint = C.Text)
+                        Icon(Icons.Filled.SelectAll, contentDescription = tr("Vybrať všetko", "Select all"), tint = C.Text)
                     }
                     IconButton(onClick = { shareMany(ctx, selected.toList(), selectedMime()) }) {
-                        Icon(Icons.Filled.Share, contentDescription = "Zdieľať", tint = C.Text)
+                        Icon(Icons.Filled.Share, contentDescription = tr("Zdieľať", "Share"), tint = C.Text)
                     }
                     IconButton(onClick = { showNearby = true }) {
-                        Icon(Icons.Filled.Bluetooth, contentDescription = "Poslať cez Wi-Fi / Bluetooth", tint = C.Text)
+                        Icon(Icons.Filled.Bluetooth, contentDescription = tr("Poslať cez Wi-Fi / Bluetooth", "Send via Wi-Fi / Bluetooth"), tint = C.Text)
                     }
                     val singleVideo = selected.size == 1 && allItems.any { it.uri == selected[0] && it.isVideo }
                     if (singleVideo) {
                         IconButton(onClick = { compressUri = selected[0] }) {
-                            Icon(Icons.Filled.Compress, contentDescription = "Komprimovať", tint = C.Text)
+                            Icon(Icons.Filled.Compress, contentDescription = tr("Komprimovať", "Compress"), tint = C.Text)
                         }
                     }
                     IconButton(onClick = { deleteSelected() }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Vymazať", tint = C.AccentText)
+                        Icon(Icons.Filled.Delete, contentDescription = tr("Vymazať", "Delete"), tint = C.AccentText)
                     }
                 }
             }
@@ -222,15 +223,15 @@ fun GalleryScreen(
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Segment("Nahrávky", tab == 0, Modifier.weight(1f)) { tab = 0 }
-                Segment("Z telefónu", tab == 1, Modifier.weight(1f)) { tab = 1 }
+                Segment(tr("Nahrávky", "Recordings"), tab == 0, Modifier.weight(1f)) { tab = 0 }
+                Segment(tr("Z telefónu", "From phone"), tab == 1, Modifier.weight(1f)) { tab = 1 }
             }
 
             if (tab == 0) {
                 Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pill("Všetko", filter == 0) { filter = 0 }
-                    Pill("Videá", filter == 1) { filter = 1 }
-                    Pill("Fotky", filter == 2) { filter = 2 }
+                    Pill(tr("Všetko", "All"), filter == 0) { filter = 0 }
+                    Pill(tr("Videá", "Videos"), filter == 1) { filter = 1 }
+                    Pill(tr("Fotky", "Photos"), filter == 2) { filter = 2 }
                 }
                 val shown = when (filter) {
                     1 -> allItems.filter { it.isVideo }
@@ -239,13 +240,13 @@ fun GalleryScreen(
                 }
                 if (shown.isNotEmpty() && !selecting) {
                     Text(
-                        "Podrž prst na položke pre označenie a vymazanie",
+                        tr("Podrž prst na položke pre označenie a vymazanie", "Long-press an item to select, share or delete"),
                         color = C.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp)
                     )
                 }
                 if (shown.isEmpty()) {
                     Text(
-                        "Tu sa zobrazia tvoje nahrávky a snímky obrazovky.",
+                        tr("Tu sa zobrazia tvoje nahrávky a snímky obrazovky.", "Your recordings and screenshots will appear here."),
                         color = C.TextDim, fontSize = 14.sp, modifier = Modifier.padding(top = 24.dp)
                     )
                 } else {
@@ -287,16 +288,16 @@ fun GalleryScreen(
                     Icon(Icons.Filled.Info, contentDescription = null, tint = Color(0xFFB9D3FF))
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "Videá a fotky z fotoaparátu, WhatsAppu či stiahnuté – vyber súbor a otvorí sa editor.",
+                        tr("Videá a fotky z fotoaparátu, WhatsAppu či stiahnuté – vyber súbor a otvorí sa editor.", "Videos and photos from the camera, WhatsApp or downloads – pick a file to open the editor."),
                         color = Color(0xFFB9D3FF), fontSize = 13.sp, lineHeight = 18.sp
                     )
                 }
                 Spacer(Modifier.height(14.dp))
-                PickCard("Vybrať video", "Strih, vystrihnutie úseku, stlmenie zvuku", Icons.Filled.Videocam) {
+                PickCard(tr("Vybrať video", "Pick a video"), tr("Strih, vystrihnutie úseku, stlmenie zvuku", "Trim, cut out a part, mute"), Icons.Filled.Videocam) {
                     pick(ActivityResultContracts.PickVisualMedia.VideoOnly)
                 }
                 Spacer(Modifier.height(10.dp))
-                PickCard("Vybrať fotku", "Orezanie, kreslenie, rozmazanie", Icons.Filled.Image) {
+                PickCard(tr("Vybrať fotku", "Pick a photo"), tr("Orezanie, kreslenie, rozmazanie", "Crop, draw, blur"), Icons.Filled.Image) {
                     pick(ActivityResultContracts.PickVisualMedia.ImageOnly)
                 }
             }
@@ -307,7 +308,7 @@ fun GalleryScreen(
             containerColor = C.Accent,
             contentColor = Color.White,
             icon = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
-            text = { Text("Importovať", fontWeight = FontWeight.SemiBold) },
+            text = { Text(tr("Importovať", "Import"), fontWeight = FontWeight.SemiBold) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)
         )
     }

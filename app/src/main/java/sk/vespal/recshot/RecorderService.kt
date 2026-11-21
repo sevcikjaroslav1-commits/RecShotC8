@@ -115,6 +115,11 @@ class RecorderService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onCreate() {
+        super.onCreate()
+        Lang.init(this)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) {
             if (projection == null) stopSelf()
@@ -167,7 +172,7 @@ class RecorderService : Service() {
         try {
             ServiceCompat.startForeground(this, NOTIF_ONGOING, notif, type)
         } catch (e: Exception) {
-            toast("Nepodarilo sa spustiť službu: ${e.message}")
+            toast(tr("Nepodarilo sa spustiť službu: ${e.message}", "Could not start the service: ${e.message}"))
             stopSelf()
             return
         }
@@ -190,7 +195,7 @@ class RecorderService : Service() {
             null
         }
         if (p == null) {
-            toast("Prístup k obrazovke nebol povolený")
+            toast(tr("Prístup k obrazovke nebol povolený", "Screen access was not allowed"))
             releaseAll()
             return
         }
@@ -209,7 +214,7 @@ class RecorderService : Service() {
         if (record) {
             _state.value = RecState.Starting
             val delayMs = max(1, settings.countdown) * 1000L
-            if (settings.countdown > 0) toast("Nahrávanie začne o ${settings.countdown} s")
+            if (settings.countdown > 0) toast(tr("Nahrávanie začne o ${settings.countdown} s", "Recording starts in ${settings.countdown} s"))
             handler.postDelayed({ beginRecording(settings) }, delayMs)
         } else if (intent.getBooleanExtra(EXTRA_SESSION, false)) {
             handler.postDelayed({ startShotSession() }, 500)
@@ -228,7 +233,7 @@ class RecorderService : Service() {
         val (w, h) = computeVideoSize(settings.resolution)
         val uri = MediaStoreUtil.newVideo(this)
         if (uri == null) {
-            toast("Nedá sa vytvoriť súbor pre video")
+            toast(tr("Nedá sa vytvoriť súbor pre video", "Cannot create the video file"))
             releaseAll()
             return
         }
@@ -239,7 +244,7 @@ class RecorderService : Service() {
         }
         if (fd == null) {
             MediaStoreUtil.delete(this, uri)
-            toast("Nedá sa otvoriť súbor pre video")
+            toast(tr("Nedá sa otvoriť súbor pre video", "Cannot open the video file"))
             releaseAll()
             return
         }
@@ -255,7 +260,7 @@ class RecorderService : Service() {
             captureMic = withMic,
         )
         try {
-            if (!enc.prepare()) throw IllegalStateException("enkodér nie je dostupný")
+            if (!enc.prepare()) throw IllegalStateException(tr("enkodér nie je dostupný", "encoder not available"))
             virtualDisplay = p.createVirtualDisplay(
                 "RecShotC8",
                 w, h, dpi,
@@ -269,12 +274,12 @@ class RecorderService : Service() {
             virtualDisplay = null
             try { fd.close() } catch (_: Exception) {}
             MediaStoreUtil.delete(this, uri)
-            toast("Nahrávanie sa nepodarilo spustiť: ${e.message}")
+            toast(tr("Nahrávanie sa nepodarilo spustiť: ${e.message}", "Recording could not start: ${e.message}"))
             releaseAll()
             return
         }
         if ((withSystem || withMic) && !enc.audioActive) {
-            toast("Zvuk sa nepodarilo zapnúť – nahrávam iba obraz")
+            toast(tr("Zvuk sa nepodarilo zapnúť – nahrávam iba obraz", "Audio unavailable – recording video only"))
         }
 
         recorder = enc
@@ -341,10 +346,10 @@ class RecorderService : Service() {
                         MediaStoreUtil.publish(this, uri)
                         savedCounter.value = savedCounter.value + 1
                         notifyDone(uri, isVideo = true)
-                        toast("Video uložené")
+                        toast(tr("Video uložené", "Video saved"))
                     } else {
                         MediaStoreUtil.delete(this, uri)
-                        toast("Video je príliš krátke, neuložilo sa")
+                        toast(tr("Video je príliš krátke, neuložilo sa", "Video too short, not saved"))
                     }
                 }
                 releaseAll()
@@ -378,7 +383,7 @@ class RecorderService : Service() {
             val bmp = imageToBitmap(img, w, h)
             img.close()
             restore()
-            if (bmp != null) saveShot(bmp) else toast("Snímka sa nepodarila")
+            if (bmp != null) saveShot(bmp) else toast(tr("Snímka sa nepodarila", "Screenshot failed"))
         }, handler)
 
         try {
@@ -386,14 +391,14 @@ class RecorderService : Service() {
         } catch (e: Exception) {
             done = true
             restore()
-            toast("Snímka sa nepodarila")
+            toast(tr("Snímka sa nepodarila", "Screenshot failed"))
             return
         }
         handler.postDelayed({
             if (!done) {
                 done = true
                 restore()
-                toast("Snímka sa nepodarila (obrazovka sa nezmenila)")
+                toast(tr("Snímka sa nepodarila (obrazovka sa nezmenila)", "Screenshot failed (screen did not change)"))
             }
         }, 1500)
     }
@@ -413,7 +418,7 @@ class RecorderService : Service() {
             )
         } catch (e: Exception) {
             reader.close()
-            toast("Režim snímok sa nepodarilo spustiť: ${e.message}")
+            toast(tr("Režim snímok sa nepodarilo spustiť: ${e.message}", "Screenshot mode could not start: ${e.message}"))
             releaseAll()
             return
         }
@@ -431,9 +436,9 @@ class RecorderService : Service() {
         )
         if (fb.show()) {
             floating = fb
-            toast("Ťukni na modré tlačidlo a obrazovka sa odfotí")
+            toast(tr("Ťukni na modré tlačidlo a obrazovka sa odfotí", "Tap the blue button to take a screenshot"))
         } else {
-            toast("Povoľ „Zobrazovať cez iné aplikácie“ pre RecShotC8")
+            toast(tr("Povoľ „Zobrazovať cez iné aplikácie“ pre RecShotC8", "Allow “Display over other apps” for RecShotC8"))
             releaseAll()
         }
     }
@@ -468,7 +473,7 @@ class RecorderService : Service() {
             val bmp = imageToBitmap(img, w, h)
             img.close()
             finish(bmp != null)
-            if (bmp != null) saveShot(bmp) else toast("Snímka sa nepodarila")
+            if (bmp != null) saveShot(bmp) else toast(tr("Snímka sa nepodarila", "Screenshot failed"))
         }, handler)
 
         // najprv skryť plávajúce tlačidlo, aby nebolo na snímke
@@ -480,14 +485,14 @@ class RecorderService : Service() {
             } catch (e: Exception) {
                 done = true
                 finish(false)
-                toast("Snímka sa nepodarila")
+                toast(tr("Snímka sa nepodarila", "Screenshot failed"))
                 return@postDelayed
             }
             handler.postDelayed({
                 if (!done) {
                     done = true
                     finish(false)
-                    toast("Snímka sa nepodarila")
+                    toast(tr("Snímka sa nepodarila", "Screenshot failed"))
                 }
             }, 2000)
         }, 180)
@@ -508,7 +513,7 @@ class RecorderService : Service() {
             done = true
             val bmp = imageToBitmap(img, w, h)
             img.close()
-            if (bmp != null) saveShot(bmp) else toast("Snímka sa nepodarila")
+            if (bmp != null) saveShot(bmp) else toast(tr("Snímka sa nepodarila", "Screenshot failed"))
             handler.post {
                 try { reader.close() } catch (_: Exception) {}
                 releaseAll()
@@ -522,7 +527,7 @@ class RecorderService : Service() {
                 reader.surface, null, handler
             )
         } catch (e: Exception) {
-            toast("Snímka sa nepodarila: ${e.message}")
+            toast(tr("Snímka sa nepodarila: ${e.message}", "Screenshot failed: ${e.message}"))
             reader.close()
             releaseAll()
             return
@@ -530,7 +535,7 @@ class RecorderService : Service() {
         handler.postDelayed({
             if (!done) {
                 done = true
-                toast("Snímka sa nepodarila")
+                toast(tr("Snímka sa nepodarila", "Screenshot failed"))
                 try { reader.close() } catch (_: Exception) {}
                 releaseAll()
             }
@@ -558,9 +563,9 @@ class RecorderService : Service() {
                 if (uri != null) {
                     savedCounter.value = savedCounter.value + 1
                     notifyDone(uri, isVideo = false)
-                    toast("Snímka uložená")
+                    toast(tr("Snímka uložená", "Screenshot saved"))
                 } else {
-                    toast("Snímku sa nepodarilo uložiť")
+                    toast(tr("Snímku sa nepodarilo uložiť", "Could not save the screenshot"))
                 }
             }
         }
@@ -644,14 +649,14 @@ class RecorderService : Service() {
     private fun createChannels() {
         val nm = getSystemService(NotificationManager::class.java) ?: return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_REC, "Nahrávanie", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Ovládanie nahrávania obrazovky"
+            NotificationChannel(CHANNEL_REC, tr("Nahrávanie", "Recording"), NotificationManager.IMPORTANCE_LOW).apply {
+                description = tr("Ovládanie nahrávania obrazovky", "Screen recording controls")
                 setShowBadge(false)
             }
         )
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_DONE, "Uložené súbory", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Upozornenie na uložené video alebo snímku"
+            NotificationChannel(CHANNEL_DONE, tr("Uložené súbory", "Saved files"), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = tr("Upozornenie na uložené video alebo snímku", "Notification about a saved video or screenshot")
             }
         )
     }
@@ -681,22 +686,22 @@ class RecorderService : Service() {
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
 
         if (starting) {
-            b.setContentTitle("Pripravujem nahrávanie…")
+            b.setContentTitle(tr("Pripravujem nahrávanie…", "Preparing recording…"))
             return b.build()
         }
 
         val shotPi = shotTrampolinePi()
 
-        b.setContentTitle(if (paused) "Nahrávanie pozastavené" else "Nahráva sa obrazovka")
-            .setContentText(if (Prefs.load(this).shakeToStop) "Zastavíš aj zatrasením telefónu" else "Ťukni na Stop pre uloženie")
+        b.setContentTitle(if (paused) tr("Nahrávanie pozastavené", "Recording paused") else tr("Nahráva sa obrazovka", "Recording screen"))
+            .setContentText(if (Prefs.load(this).shakeToStop) tr("Zastavíš aj zatrasením telefónu", "Shake the phone to stop") else tr("Ťukni na Stop pre uloženie", "Tap Stop to save"))
         if (!paused) {
             val s = _state.value as? RecState.Recording
             b.setUsesChronometer(true).setWhen(s?.startedAt ?: System.currentTimeMillis()).setShowWhen(true)
-            b.addAction(R.drawable.ic_pause, "Pauza", servicePi(ACTION_PAUSE, 1))
+            b.addAction(R.drawable.ic_pause, tr("Pauza", "Pause"), servicePi(ACTION_PAUSE, 1))
         } else {
-            b.addAction(R.drawable.ic_play, "Pokračovať", servicePi(ACTION_RESUME, 2))
+            b.addAction(R.drawable.ic_play, tr("Pokračovať", "Resume"), servicePi(ACTION_RESUME, 2))
         }
-        b.addAction(R.drawable.ic_shot, "Snímka", shotPi)
+        b.addAction(R.drawable.ic_shot, tr("Snímka", "Screenshot"), shotPi)
         b.addAction(R.drawable.ic_stop, "Stop", servicePi(ACTION_STOP, 3))
         return b.build()
     }
@@ -712,20 +717,20 @@ class RecorderService : Service() {
     private fun sessionNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_REC)
             .setSmallIcon(R.drawable.ic_shot)
-            .setContentTitle("Režim snímok je zapnutý")
-            .setContentText("Ťukni na modré plávajúce tlačidlo")
+            .setContentTitle(tr("Režim snímok je zapnutý", "Screenshot mode is on"))
+            .setContentText(tr("Ťukni na modré plávajúce tlačidlo", "Tap the blue floating button"))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(R.drawable.ic_stop, "Ukončiť", servicePi(ACTION_STOP, 3))
+            .addAction(R.drawable.ic_stop, tr("Ukončiť", "End"), servicePi(ACTION_STOP, 3))
             .build()
 
     private fun shotNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_REC)
             .setSmallIcon(R.drawable.ic_shot)
-            .setContentTitle("Robím snímku obrazovky…")
+            .setContentTitle(tr("Robím snímku obrazovky…", "Taking screenshot…"))
             .setSilent(true)
             .setOngoing(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
@@ -752,8 +757,8 @@ class RecorderService : Service() {
         )
         val n = NotificationCompat.Builder(this, CHANNEL_DONE)
             .setSmallIcon(if (isVideo) R.drawable.ic_stat_rec else R.drawable.ic_shot)
-            .setContentTitle(if (isVideo) "Video uložené" else "Snímka uložená")
-            .setContentText("Ťukni pre úpravu")
+            .setContentTitle(if (isVideo) tr("Video uložené", "Video saved") else tr("Snímka uložená", "Screenshot saved"))
+            .setContentText(tr("Ťukni pre úpravu", "Tap to edit"))
             .setAutoCancel(true)
             .setContentIntent(pi)
             .build()

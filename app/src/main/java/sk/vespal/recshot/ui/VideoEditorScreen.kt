@@ -1,5 +1,6 @@
 package sk.vespal.recshot.ui
 
+import sk.vespal.recshot.tr
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -140,7 +141,12 @@ import sk.vespal.recshot.RecorderService
 import java.io.File
 import kotlin.math.max
 
-private enum class VTool(val label: String) { CUT("Strih"), CROP("Orezať"), SPEED("Rýchlosť"), TEXT("Text"), MUSIC("Hudba"), AUDIO("Zvuk") }
+private enum class VTool(private val sk: String, private val en: String) {
+    CUT("Strih", "Trim"), CROP("Orezať", "Crop"), SPEED("Rýchlosť", "Speed"),
+    TEXT("Text", "Text"), MUSIC("Hudba", "Music"), AUDIO("Zvuk", "Sound");
+
+    val label: String get() = tr(sk, en)
+}
 
 private val speeds = listOf(0.25f, 0.5f, 1f, 1.5f, 2f, 3f)
 private val textColors = listOf(Color.White, Color(0xFFFFC24A), Color(0xFFE8462A), Color(0xFF6EA8FF), Color.Black)
@@ -221,7 +227,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
     val musicPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { picked ->
         if (picked != null) {
             musicUri = picked
-            musicName = displayName(ctx, picked) ?: "Vybraná hudba"
+            musicName = displayName(ctx, picked) ?: tr("Vybraná hudba", "Selected music")
         }
     }
 
@@ -320,10 +326,10 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
         // horná lišta
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 14.dp, top = 6.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Späť", tint = C.Text, modifier = Modifier.size(28.dp))
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = tr("Späť", "Back"), tint = C.Text, modifier = Modifier.size(28.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text("Úprava videa", color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(tr("Úprava videa", "Edit video"), color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 val info = buildString {
                     if (durationMs > 0) append(formatDuration(durationMs))
                     if (videoWidth > 0) append(" · $videoWidth × $videoHeight")
@@ -358,10 +364,10 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                         transformer = null
                         if (saved != null) {
                             RecorderService.savedCounter.value = RecorderService.savedCounter.value + 1
-                            Toast.makeText(ctx, "Video uložené do Galéria › RecShotC8", Toast.LENGTH_LONG).show()
+                            Toast.makeText(ctx, tr("Video uložené do Galéria › RecShotC8", "Video saved to Gallery › RecShotC8"), Toast.LENGTH_LONG).show()
                             onOpenGallery()
                         } else {
-                            Toast.makeText(ctx, "Export sa nepodaril", Toast.LENGTH_LONG).show()
+                            Toast.makeText(ctx, tr("Export sa nepodaril", "Export failed"), Toast.LENGTH_LONG).show()
                         }
                     }
                 },
@@ -369,7 +375,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             ) {
                 Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Exportovať", fontWeight = FontWeight.SemiBold)
+                Text(tr("Exportovať", "Export"), fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -378,13 +384,13 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            ActionChip("Zdieľať", Icons.Filled.Share, Color(0xFF13261F), Color(0xFF21403A), Color(0xFF7FE0B0), Modifier.weight(1f)) {
+            ActionChip(tr("Zdieľať", "Share"), Icons.Filled.Share, Color(0xFF13261F), Color(0xFF21403A), Color(0xFF7FE0B0), Modifier.weight(1f)) {
                 shareUri(ctx, uri, "video/*")
             }
             ActionChip("Wi-Fi / BT", Icons.Filled.Wifi, Color(0xFF132036), Color(0xFF24406A), Color(0xFF8FBEFF), Modifier.weight(1f)) {
                 showNearby = true
             }
-            ActionChip("Zmenšiť", Icons.Filled.Compress, Color(0xFF1C1929), Color(0xFF2F2950), Color(0xFFC9B8FF), Modifier.weight(1f)) {
+            ActionChip(tr("Zmenšiť", "Compress"), Icons.Filled.Compress, Color(0xFF1C1929), Color(0xFF2F2950), Color(0xFFC9B8FF), Modifier.weight(1f)) {
                 player.pause()
                 showCompress = true
             }
@@ -457,7 +463,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             ) {
                 Icon(
                     if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (playing) "Pauza" else "Prehrať",
+                    contentDescription = if (playing) tr("Pauza", "Pause") else tr("Prehrať", "Play"),
                     tint = Color.White, modifier = Modifier.size(30.dp)
                 )
             }
@@ -466,13 +472,13 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
         // časy
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp)) {
             Text(
-                if (scrubbing) "Strih na ${formatPrecise(positionMs)}"
+                if (scrubbing) tr("Strih na ${formatPrecise(positionMs)}", "Cut at ${formatPrecise(positionMs)}")
                 else "${formatDuration((positionMs / speed).toLong())} / ${formatDuration(resultMs)}",
                 color = if (scrubbing) C.Trim else C.Text,
                 fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
             )
             Text(
-                if (scrubbing) "Pusti ▶ pre náhľad výsledku" else "Náhľad výsledku",
+                if (scrubbing) tr("Pusti ▶ pre náhľad výsledku", "Press ▶ to preview the result") else tr("Náhľad výsledku", "Result preview"),
                 color = C.TextDim, fontSize = 13.sp
             )
         }
@@ -538,8 +544,8 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             when (tool) {
                 VTool.CUT -> Column {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ModeButton("Ponechať výber", !cutMiddle, Modifier.weight(1f)) { cutMiddle = false }
-                        ModeButton("Vystrihnúť výber", cutMiddle, Modifier.weight(1f)) { cutMiddle = true }
+                        ModeButton(tr("Ponechať výber", "Keep selection"), !cutMiddle, Modifier.weight(1f)) { cutMiddle = false }
+                        ModeButton(tr("Vystrihnúť výber", "Cut out selection"), cutMiddle, Modifier.weight(1f)) { cutMiddle = true }
                     }
                     Spacer(Modifier.height(10.dp))
                     // jemné doladenie po 0,1 s
@@ -556,14 +562,14 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                             showFull(ms)
                         }
                     }
-                    NudgeRow("Začiatok", formatPrecise(startMs), { nudge(true, -100) }, { nudge(true, 100) })
+                    NudgeRow(tr("Začiatok", "Start"), formatPrecise(startMs), { nudge(true, -100) }, { nudge(true, 100) })
                     Spacer(Modifier.height(6.dp))
-                    NudgeRow("Koniec", formatPrecise(endMs), { nudge(false, -100) }, { nudge(false, 100) })
+                    NudgeRow(tr("Koniec", "End"), formatPrecise(endMs), { nudge(false, -100) }, { nudge(false, 100) })
                 }
 
                 VTool.CROP -> Column {
                     Text(
-                        "Potiahni rohy rámika na videu. Čo je mimo rámika, nebude vo výslednom videu.",
+                        tr("Potiahni rohy rámika na videu. Čo je mimo rámika, nebude vo výslednom videu.", "Drag the corners of the frame on the video. Anything outside the frame will be removed."),
                         color = C.TextDim, fontSize = 13.sp, lineHeight = 18.sp
                     )
                     Spacer(Modifier.height(10.dp))
@@ -571,9 +577,9 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                         Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SmallChip("Celé", isFullCrop(crop)) { crop = FULL_CROP }
-                        SmallChip("Bez hornej lišty", false) { crop = Rect(crop.left, 0.045f, crop.right, crop.bottom) }
-                        SmallChip("Bez spodnej lišty", false) { crop = Rect(crop.left, crop.top, crop.right, 0.955f) }
+                        SmallChip(tr("Celé", "Full"), isFullCrop(crop)) { crop = FULL_CROP }
+                        SmallChip(tr("Bez hornej lišty", "No top bar"), false) { crop = Rect(crop.left, 0.045f, crop.right, crop.bottom) }
+                        SmallChip(tr("Bez spodnej lišty", "No bottom bar"), false) { crop = Rect(crop.left, crop.top, crop.right, 0.955f) }
                         SmallChip("1:1", false) { crop = aspectCrop(1f, videoWidth, videoHeight) }
                         SmallChip("9:16", false) { crop = aspectCrop(9f / 16f, videoWidth, videoHeight) }
                         SmallChip("16:9", false) { crop = aspectCrop(16f / 9f, videoWidth, videoHeight) }
@@ -581,7 +587,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     Spacer(Modifier.height(6.dp))
                     val outW = ((crop.right - crop.left) * videoWidth).roundToInt()
                     val outH = ((crop.bottom - crop.top) * videoHeight).roundToInt()
-                    Text("Výsledok: $outW × $outH px", color = C.Trim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(tr("Výsledok: $outW × $outH px", "Result: $outW × $outH px"), color = C.Trim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 VTool.SPEED -> Row(
@@ -598,7 +604,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it.take(80) },
-                        placeholder = { Text("Napíš text do videa") },
+                        placeholder = { Text(tr("Napíš text do videa", "Type text for the video")) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = C.Accent,
@@ -611,9 +617,9 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     )
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SmallChip("Hore", textPos == 0) { textPos = 0 }
-                        SmallChip("Stred", textPos == 1) { textPos = 1 }
-                        SmallChip("Dole", textPos == 2) { textPos = 2 }
+                        SmallChip(tr("Hore", "Top"), textPos == 0) { textPos = 0 }
+                        SmallChip(tr("Stred", "Middle"), textPos == 1) { textPos = 1 }
+                        SmallChip(tr("Dole", "Bottom"), textPos == 2) { textPos = 2 }
                         Spacer(Modifier.width(4.dp))
                         textColors.forEach { c ->
                             Box(
@@ -636,19 +642,19 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                         ) {
                             Icon(Icons.Filled.MusicNote, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
-                            Text(if (musicUri == null) "Vybrať hudbu" else "Zmeniť")
+                            Text(if (musicUri == null) tr("Vybrať hudbu", "Pick music") else tr("Zmeniť", "Change"))
                         }
                         if (musicUri != null) {
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "Odstrániť", color = C.AccentText, fontSize = 14.sp,
+                                tr("Odstrániť", "Remove"), color = C.AccentText, fontSize = 14.sp,
                                 modifier = Modifier.clickable { musicUri = null; musicName = "" }.padding(8.dp)
                             )
                         }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        if (musicUri == null) "Hudba sa pridá pod video a opakuje sa až do konca."
+                        if (musicUri == null) tr("Hudba sa pridá pod video a opakuje sa až do konca.", "Music is added under the video and loops until the end.")
                         else "♪ $musicName",
                         color = C.TextDim, fontSize = 13.sp, maxLines = 1
                     )
@@ -656,14 +662,14 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
 
                 VTool.AUDIO -> Column {
                     VolumeRow(
-                        title = "Pôvodný zvuk videa",
+                        title = tr("Pôvodný zvuk videa", "Original video sound"),
                         value = originalVolume,
                         onChange = { originalVolume = it },
                     )
                     if (musicUri != null) {
                         Spacer(Modifier.height(8.dp))
                         VolumeRow(
-                            title = "Hudba",
+                            title = tr("Hudba", "Music"),
                             value = musicVolume,
                             onChange = { musicVolume = it },
                         )
@@ -673,7 +679,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
 
             if (exporting) {
                 Spacer(Modifier.height(10.dp))
-                Text("Exportujem… ${(progress * 100).toInt()} %", color = C.Text, fontSize = 13.sp)
+                Text(tr("Exportujem… ${(progress * 100).toInt()} %", "Exporting… ${(progress * 100).toInt()} %"), color = C.Text, fontSize = 13.sp)
                 Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(
                     progress = { progress },
@@ -924,7 +930,7 @@ private fun VolumeRow(title: String, value: Float, onChange: (Float) -> Unit) {
         Spacer(Modifier.width(10.dp))
         Text(title, color = C.Text, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Text(
-            if (value < 0.01f) "Vypnutý" else "$pct %",
+            if (value < 0.01f) tr("Vypnutý", "Off") else "$pct %",
             color = if (value < 0.01f) C.AccentText else C.Trim,
             fontSize = 14.sp, fontWeight = FontWeight.SemiBold
         )
@@ -936,9 +942,9 @@ private fun VolumeRow(title: String, value: Float, onChange: (Float) -> Unit) {
         colors = SliderDefaults.colors(thumbColor = C.Trim, activeTrackColor = C.Trim),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        SmallChip("Vypnúť", value < 0.01f) { onChange(0f) }
+        SmallChip(tr("Vypnúť", "Mute"), value < 0.01f) { onChange(0f) }
         SmallChip("50 %", pct == 50) { onChange(0.5f) }
-        SmallChip("Originál", pct == 100) { onChange(1f) }
+        SmallChip(tr("Originál", "Original"), pct == 100) { onChange(1f) }
         SmallChip("150 %", pct == 150) { onChange(1.5f) }
     }
 }

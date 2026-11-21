@@ -1,5 +1,6 @@
 package sk.vespal.recshot.ui
 
+import sk.vespal.recshot.tr
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -80,14 +81,14 @@ fun AppRoot(
                         selected = screen == Screen.Home,
                         onClick = { onTab(Screen.Home) },
                         icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                        label = { Text("Domov") },
+                        label = { Text(tr("Domov", "Home")) },
                         colors = colors,
                     )
                     NavigationBarItem(
                         selected = screen == Screen.Gallery,
                         onClick = { onTab(Screen.Gallery) },
                         icon = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
-                        label = { Text("Galéria") },
+                        label = { Text(tr("Galéria", "Gallery")) },
                         colors = colors,
                     )
                 }
@@ -167,7 +168,7 @@ fun Thumb(
                     .border(2.dp, Color.White, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (selected) Icon(Icons.Filled.Check, contentDescription = "Vybraté", tint = Color.White, modifier = Modifier.size(16.dp))
+                if (selected) Icon(Icons.Filled.Check, contentDescription = tr("Vybraté", "Selected"), tint = Color.White, modifier = Modifier.size(16.dp))
             }
         }
         Row(
@@ -204,5 +205,5 @@ fun shareUri(ctx: Context, uri: Uri, mime: String) {
         .setType(mime)
         .putExtra(Intent.EXTRA_STREAM, uri)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    ctx.startActivity(Intent.createChooser(send, "Zdieľať").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    ctx.startActivity(Intent.createChooser(send, tr("Zdieľať", "Share")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }

@@ -1,5 +1,6 @@
 package sk.vespal.recshot.ui
 
+import sk.vespal.recshot.tr
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
@@ -106,9 +107,9 @@ fun ImageEditorScreen(uri: Uri, onBack: () -> Unit) {
         Box(Modifier.fillMaxSize().background(C.Bg), contentAlignment = Alignment.Center) {
             if (failed) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Obrázok sa nepodarilo otvoriť", color = C.Text)
+                    Text(tr("Obrázok sa nepodarilo otvoriť", "Could not open the image"), color = C.Text)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = onBack) { Text("Späť") }
+                    Button(onClick = onBack) { Text(tr("Späť", "Back")) }
                 }
             } else {
                 CircularProgressIndicator(color = C.Accent)
@@ -167,17 +168,17 @@ private fun Editor(bmp: Bitmap, sourceUri: Uri, onBack: () -> Unit) {
         // horná lišta
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Späť", tint = C.Text)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Späť", "Back"), tint = C.Text)
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { undo() }, enabled = history.isNotEmpty()) {
-                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Späť krok", tint = if (history.isNotEmpty()) C.Text else C.Border)
+                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = tr("Späť krok", "Undo"), tint = if (history.isNotEmpty()) C.Text else C.Border)
             }
             IconButton(onClick = { shareUri(ctx, savedUri ?: sourceUri, "image/*") }) {
-                Icon(Icons.Filled.Share, contentDescription = "Zdieľať", tint = C.Text)
+                Icon(Icons.Filled.Share, contentDescription = tr("Zdieľať", "Share"), tint = C.Text)
             }
             IconButton(onClick = { showNearby = true }) {
-                Icon(Icons.Filled.Bluetooth, contentDescription = "Poslať cez Wi-Fi / Bluetooth", tint = C.Text)
+                Icon(Icons.Filled.Bluetooth, contentDescription = tr("Poslať cez Wi-Fi / Bluetooth", "Send via Wi-Fi / Bluetooth"), tint = C.Text)
             }
             Button(
                 enabled = !saving,
@@ -195,14 +196,14 @@ private fun Editor(bmp: Bitmap, sourceUri: Uri, onBack: () -> Unit) {
                         savedUri = uri
                         if (uri != null) {
                             RecorderService.savedCounter.value = RecorderService.savedCounter.value + 1
-                            Toast.makeText(ctx, "Uložené do Galéria › RecShotC8", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, tr("Uložené do Galéria › RecShotC8", "Saved to Gallery › RecShotC8"), Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(ctx, "Uloženie sa nepodarilo", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, tr("Uloženie sa nepodarilo", "Saving failed"), Toast.LENGTH_SHORT).show()
                         }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = C.Accent),
-            ) { Text(if (saving) "Ukladám…" else "Uložiť", fontWeight = FontWeight.SemiBold) }
+            ) { Text(if (saving) tr("Ukladám…", "Saving…") else tr("Uložiť", "Save"), fontWeight = FontWeight.SemiBold) }
         }
 
         // plátno
@@ -385,7 +386,7 @@ private fun Editor(bmp: Bitmap, sourceUri: Uri, onBack: () -> Unit) {
             }
         } else {
             Text(
-                if (tool == Tool.CROP) "Potiahni rohy alebo celý výrez" else "Potiahni prstom cez oblasť, ktorú chceš skryť",
+                if (tool == Tool.CROP) tr("Potiahni rohy alebo celý výrez", "Drag the corners or the whole frame") else tr("Potiahni prstom cez oblasť, ktorú chceš skryť", "Drag over the area you want to hide"),
                 color = C.TextDim, fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
             )
@@ -396,9 +397,9 @@ private fun Editor(bmp: Bitmap, sourceUri: Uri, onBack: () -> Unit) {
             Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            ToolButton("Orezať", Icons.Filled.Crop, tool == Tool.CROP, Modifier.weight(1f)) { tool = Tool.CROP }
-            ToolButton("Kresliť", Icons.Filled.Brush, tool == Tool.DRAW, Modifier.weight(1f)) { tool = Tool.DRAW }
-            ToolButton("Rozmazať", Icons.Filled.BlurOn, tool == Tool.BLUR, Modifier.weight(1f)) { tool = Tool.BLUR }
+            ToolButton(tr("Orezať", "Crop"), Icons.Filled.Crop, tool == Tool.CROP, Modifier.weight(1f)) { tool = Tool.CROP }
+            ToolButton(tr("Kresliť", "Draw"), Icons.Filled.Brush, tool == Tool.DRAW, Modifier.weight(1f)) { tool = Tool.DRAW }
+            ToolButton(tr("Rozmazať", "Blur"), Icons.Filled.BlurOn, tool == Tool.BLUR, Modifier.weight(1f)) { tool = Tool.BLUR }
         }
     }
 }

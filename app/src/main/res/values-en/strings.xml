@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RecShotC8</string>
+    <string name="edit_with_recshot">Edit in RecShotC8</string>
+    <string name="tile_record">Record screen</string>
+    <string name="tile_shot">Screenshot</string>
+</resources>

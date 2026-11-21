@@ -1,5 +1,6 @@
 package sk.vespal.recshot.ui
 
+import sk.vespal.recshot.tr
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
@@ -77,9 +78,9 @@ fun shareMany(ctx: Context, uris: List<Uri>, mime: String) {
     }
     send.setType(mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     try {
-        ctx.startActivity(Intent.createChooser(send, "Zdieľať cez…").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(Intent.createChooser(send, tr("Zdieľať cez…", "Share via…")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (e: Exception) {
-        Toast.makeText(ctx, "Zdieľanie nie je dostupné", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, tr("Zdieľanie nie je dostupné", "Sharing is not available"), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -142,16 +143,16 @@ fun NearbyDialog(uris: List<Uri>, mime: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = C.Surface,
-        title = { Text("Poslať do blízkeho zariadenia", color = C.Text) },
+        title = { Text(tr("Poslať do blízkeho zariadenia", "Send to a nearby device"), color = C.Text) },
         text = {
             Column {
                 Text(
-                    "Prenos cez Wi-Fi alebo Bluetooth bez internetu – do telefónu, tabletu alebo počítača vedľa teba.",
+                    tr("Prenos cez Wi-Fi alebo Bluetooth bez internetu – do telefónu, tabletu alebo počítača vedľa teba.", "Transfer over Wi-Fi or Bluetooth without internet – to a phone, tablet or computer next to you."),
                     color = C.TextDim, fontSize = 13.sp, lineHeight = 18.sp
                 )
                 Spacer(Modifier.height(12.dp))
                 if (targets.isEmpty()) {
-                    Text("V telefóne sa nenašiel Quick Share ani Bluetooth. Použi Zdieľať.", color = C.AccentText, fontSize = 13.sp)
+                    Text(tr("V telefóne sa nenašiel Quick Share ani Bluetooth. Použi Zdieľať.", "Quick Share or Bluetooth was not found on this phone. Use Share."), color = C.AccentText, fontSize = 13.sp)
                 }
                 targets.forEach { t ->
                     ActionRow(t.label) {
@@ -160,13 +161,13 @@ fun NearbyDialog(uris: List<Uri>, mime: String, onDismiss: () -> Unit) {
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                ActionRow("Iné možnosti zdieľania…") {
+                ActionRow(tr("Iné možnosti zdieľania…", "Other sharing options…")) {
                     shareMany(ctx, uris, mime)
                     onDismiss()
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Zavrieť") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Zavrieť", "Close")) } },
     )
 }
 
@@ -233,9 +234,9 @@ private fun presetsFor(info: SourceInfo, hevc: Boolean): List<Preset> {
     val origVideoBr = max(1_000_000, info.bitrate - 160_000)
     val high = min((origVideoBr * 0.5f).toInt(), (6_000_000 * f).toInt())
     return listOf(
-        Preset("Vysoká kvalita", "Rovnaké rozlíšenie, menší súbor", short, max(1_500_000, high)),
-        Preset("Vyvážená", "Do 1080p – ideálne na WhatsApp a e-mail", min(short, 1080), (3_000_000 * f).toInt()),
-        Preset("Malý súbor", "720p – najmenšia veľkosť", min(short, 720), (1_500_000 * f).toInt()),
+        Preset(tr("Vysoká kvalita", "High quality"), tr("Rovnaké rozlíšenie, menší súbor", "Same resolution, smaller file"), short, max(1_500_000, high)),
+        Preset(tr("Vyvážená", "Balanced"), tr("Do 1080p – ideálne na WhatsApp a e-mail", "Up to 1080p – ideal for WhatsApp and e-mail"), min(short, 1080), (3_000_000 * f).toInt()),
+        Preset(tr("Malý súbor", "Small file"), tr("720p – najmenšia veľkosť", "720p – smallest size"), min(short, 720), (1_500_000 * f).toInt()),
     )
 }
 
@@ -271,14 +272,14 @@ fun CompressDialog(uri: Uri, onDismiss: () -> Unit, onDone: (Uri) -> Unit = {}) 
     AlertDialog(
         onDismissRequest = { if (!running) onDismiss() },
         containerColor = C.Surface,
-        title = { Text("Komprimovať video", color = C.Text) },
+        title = { Text(tr("Komprimovať video", "Compress video"), color = C.Text) },
         text = {
             Column {
                 when {
-                    inf == null -> Text("Načítavam…", color = C.TextDim)
+                    inf == null -> Text(tr("Načítavam…", "Loading…"), color = C.TextDim)
                     resultText != null -> Text(resultText!!, color = C.Text, fontSize = 15.sp, lineHeight = 21.sp)
                     running -> {
-                        Text("Komprimujem… ${(progress * 100).toInt()} %", color = C.Text)
+                        Text(tr("Komprimujem… ${(progress * 100).toInt()} %", "Compressing… ${(progress * 100).toInt()} %"), color = C.Text)
                         Spacer(Modifier.height(10.dp))
                         LinearProgressIndicator(
                             progress = { progress }, color = C.Accent, trackColor = C.SurfaceHi,
@@ -287,13 +288,13 @@ fun CompressDialog(uri: Uri, onDismiss: () -> Unit, onDone: (Uri) -> Unit = {}) 
                     }
                     else -> {
                         Text(
-                            "Teraz: ${formatMb(inf.sizeBytes)} · ${min(inf.width, inf.height)}p" + if (hevc) " · kodek H.265" else "",
+                            tr("Teraz: ${formatMb(inf.sizeBytes)} · ${min(inf.width, inf.height)}p", "Now: ${formatMb(inf.sizeBytes)} · ${min(inf.width, inf.height)}p") + if (hevc) tr(" · kodek H.265", " · H.265 codec") else "",
                             color = C.TextDim, fontSize = 13.sp
                         )
                         Spacer(Modifier.height(12.dp))
                         presetsFor(inf, hevc).forEachIndexed { i, p ->
                             val est = ((p.videoBitrate + 128_000L) * inf.durationMs / 8000L)
-                            val estText = if (inf.sizeBytes > 0 && est >= inf.sizeBytes) "≈ bez zmeny" else "≈ ${formatMb(est)}"
+                            val estText = if (inf.sizeBytes > 0 && est >= inf.sizeBytes) tr("≈ bez zmeny", "≈ no change") else "≈ ${formatMb(est)}"
                             Column(
                                 Modifier
                                     .fillMaxWidth()
@@ -308,11 +309,11 @@ fun CompressDialog(uri: Uri, onDismiss: () -> Unit, onDone: (Uri) -> Unit = {}) 
                                             running = false
                                             if (saved != null) {
                                                 val newSize = sourceInfo(ctx, saved).sizeBytes
-                                                resultText = "Hotovo ✓\n${formatMb(inf.sizeBytes)} → ${formatMb(newSize)}\nUložené v Galéria › RecShotC8"
+                                                resultText = tr("Hotovo ✓\n${formatMb(inf.sizeBytes)} → ${formatMb(newSize)}\nUložené v Galéria › RecShotC8", "Done ✓\n${formatMb(inf.sizeBytes)} → ${formatMb(newSize)}\nSaved in Gallery › RecShotC8")
                                                 RecorderService.savedCounter.value = RecorderService.savedCounter.value + 1
                                                 onDone(saved)
                                             } else {
-                                                resultText = "Kompresia sa nepodarila."
+                                                resultText = tr("Kompresia sa nepodarila.", "Compression failed.")
                                             }
                                         }
                                     }
@@ -332,9 +333,9 @@ fun CompressDialog(uri: Uri, onDismiss: () -> Unit, onDone: (Uri) -> Unit = {}) 
         },
         confirmButton = {
             if (running) {
-                TextButton(onClick = { transformer?.cancel(); transformer = null; running = false; onDismiss() }) { Text("Zrušiť") }
+                TextButton(onClick = { transformer?.cancel(); transformer = null; running = false; onDismiss() }) { Text(tr("Zrušiť", "Cancel")) }
             } else {
-                TextButton(onClick = onDismiss) { Text(if (resultText != null) "OK" else "Zavrieť") }
+                TextButton(onClick = onDismiss) { Text(if (resultText != null) "OK" else tr("Zavrieť", "Close")) }
             }
         },
     )

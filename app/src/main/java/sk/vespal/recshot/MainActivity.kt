@@ -55,14 +55,14 @@ class MainActivity : ComponentActivity() {
                 // Aplikácia ide do pozadia, aby nebola na zázname ani na snímke.
                 moveTaskToBack(true)
             } else {
-                Toast.makeText(this, "Zrušené", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, tr("Zrušené", "Cancelled"), Toast.LENGTH_SHORT).show()
             }
         }
 
     private val micPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) {
-                Toast.makeText(this, "Bez povolenia na zvuk – video bude bez zvuku", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, tr("Bez povolenia na zvuk – video bude bez zvuku", "No audio permission – video will have no sound"), Toast.LENGTH_SHORT).show()
             }
             launchProjection(CaptureMode.RECORD)
         }
@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
             if (Settings.canDrawOverlays(this)) {
                 launchProjection(CaptureMode.SHOT_SESSION)
             } else {
-                Toast.makeText(this, "Bez povolenia sa plávajúce tlačidlo nedá zobraziť", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, tr("Bez povolenia sa plávajúce tlačidlo nedá zobraziť", "Without permission the floating button cannot be shown"), Toast.LENGTH_LONG).show()
             }
         }
 
@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        Lang.init(this)
         pendingMode = savedInstanceState?.getString(KEY_PENDING)?.let { CaptureMode.valueOf(it) }
 
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -162,7 +163,7 @@ class MainActivity : ComponentActivity() {
         val st = RecorderService.state.value
         if (mode != CaptureMode.RECORD && (st is RecState.Recording || st == RecState.ShotSession)) {
             if (st == RecState.ShotSession && mode == CaptureMode.SHOT_SESSION) {
-                Toast.makeText(this, "Režim snímok beží – ťukni na modré plávajúce tlačidlo", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, tr("Režim snímok beží – ťukni na modré plávajúce tlačidlo", "Screenshot mode is on – tap the blue floating button"), Toast.LENGTH_LONG).show()
                 moveTaskToBack(true)
                 return
             }
@@ -171,15 +172,15 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (st == RecState.ShotSession) {
-            Toast.makeText(this, "Najprv ukonči režim snímok", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("Najprv ukonči režim snímok", "Stop screenshot mode first"), Toast.LENGTH_SHORT).show()
             return
         }
         if (st != RecState.Idle) {
-            Toast.makeText(this, "Nahrávanie už beží", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("Nahrávanie už beží", "Recording is already running"), Toast.LENGTH_SHORT).show()
             return
         }
         if (mode == CaptureMode.SHOT_SESSION && !Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "Povoľ RecShotC8: Zobrazovať cez iné aplikácie", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, tr("Povoľ RecShotC8: Zobrazovať cez iné aplikácie", "Allow RecShotC8: Display over other apps"), Toast.LENGTH_LONG).show()
             try {
                 overlayPermission.launch(
                     Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
@@ -211,7 +212,7 @@ class MainActivity : ComponentActivity() {
             projectionLauncher.launch(intent)
         } catch (e: Exception) {
             pendingMode = null
-            Toast.makeText(this, "Zachytávanie obrazovky nie je dostupné", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, tr("Zachytávanie obrazovky nie je dostupné", "Screen capture is not available"), Toast.LENGTH_LONG).show()
         }
     }
 
