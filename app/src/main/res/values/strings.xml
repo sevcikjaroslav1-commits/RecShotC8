@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RecShotC8</string>
+    <string name="edit_with_recshot">Upraviť v RecShotC8</string>
+    <string name="tile_record">Nahrať obrazovku</string>
+    <string name="tile_shot">Snímka obrazovky</string>
+</resources>
