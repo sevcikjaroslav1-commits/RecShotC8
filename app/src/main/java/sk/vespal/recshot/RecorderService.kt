@@ -43,6 +43,8 @@ sealed class RecState {
     data object Starting : RecState()
     data class Recording(val paused: Boolean, val startedAt: Long) : RecState()
     data object TakingShot : RecState()
+    /** Režim snímok: aplikácia je skrytá, snímka sa robí zatrasením alebo z notifikácie. */
+    data object ShotSession : RecState()
 }
 
 /**
@@ -66,6 +68,7 @@ class RecorderService : Service() {
         const val EXTRA_WIDTH = "w"
         const val EXTRA_HEIGHT = "h"
         const val EXTRA_DPI = "dpi"
+        const val EXTRA_SESSION = "session"
 
         private const val CHANNEL_REC = "recording"
         private const val CHANNEL_DONE = "done"
@@ -106,6 +109,8 @@ class RecorderService : Service() {
     private var stopping = false
     private var withMic = false
     private var withSystem = false
+    private var shotReader: ImageReader? = null
+    private var shotBusy = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -126,7 +131,9 @@ class RecorderService : Service() {
             ACTION_STOP -> stopRecording()
             ACTION_PAUSE -> pauseRecording()
             ACTION_RESUME -> resumeRecording()
-            ACTION_SHOT_DURING -> handler.postDelayed({ shotDuringRecording() }, 600)
+            ACTION_SHOT_DURING -> handler.postDelayed({
+                if (recorder != null) shotDuringRecording() else sessionShot()
+            }, 600)
             else -> if (projection == null) stopSelf()
         }
         return START_NOT_STICKY
@@ -203,6 +210,8 @@ class RecorderService : Service() {
             val delayMs = max(1, settings.countdown) * 1000L
             if (settings.countdown > 0) toast("Nahrávanie začne o ${settings.countdown} s")
             handler.postDelayed({ beginRecording(settings) }, delayMs)
+        } else if (intent.getBooleanExtra(EXTRA_SESSION, false)) {
+            handler.postDelayed({ startShotSession() }, 500)
         } else {
             _state.value = RecState.TakingShot
             // počkáme, kým zmizne systémový dialóg a naša aplikácia
@@ -388,6 +397,85 @@ class RecorderService : Service() {
         }, 1500)
     }
 
+    // ---------------------------------------------------------------- režim snímok
+
+    /** Spustí režim snímok: virtuálny displej čaká bez obrazu, kým si používateľ nevyžiada snímku. */
+    private fun startShotSession() {
+        val p = projection ?: return releaseAll()
+        if (stopping) return
+        val reader = ImageReader.newInstance(screenW, screenH, PixelFormat.RGBA_8888, 2)
+        try {
+            virtualDisplay = p.createVirtualDisplay(
+                "RecShotC8Shots", screenW, screenH, dpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                null, null, handler
+            )
+        } catch (e: Exception) {
+            reader.close()
+            toast("Režim snímok sa nepodarilo spustiť: ${e.message}")
+            releaseAll()
+            return
+        }
+        shotReader = reader
+        _state.value = RecState.ShotSession
+        val nm = getSystemService(NotificationManager::class.java)
+        try {
+            nm?.notify(NOTIF_ONGOING, sessionNotification())
+        } catch (_: SecurityException) {
+        }
+        shake = ShakeDetector(this) { handler.postDelayed({ sessionShot() }, 300) }.also { it.start() }
+        toast("Režim snímok: prejdi do aplikácie a zatras telefónom")
+    }
+
+    /** Jedna snímka v režime snímok – obraz sa na chvíľu pustí do ImageReadera. */
+    private fun sessionShot() {
+        if (shotBusy) return
+        val vd = virtualDisplay ?: return
+        val reader = shotReader ?: return
+        if (_state.value != RecState.ShotSession) return
+        shotBusy = true
+        val w = screenW
+        val h = screenH
+        var done = false
+
+        try { reader.acquireLatestImage()?.close() } catch (_: Exception) {}
+
+        fun finish() {
+            try { vd.surface = null } catch (_: Exception) {}
+            shotBusy = false
+        }
+
+        reader.setOnImageAvailableListener({ rd ->
+            val img = try { rd.acquireLatestImage() } catch (_: Exception) { null }
+                ?: return@setOnImageAvailableListener
+            if (done) {
+                img.close()
+                return@setOnImageAvailableListener
+            }
+            done = true
+            val bmp = imageToBitmap(img, w, h)
+            img.close()
+            finish()
+            if (bmp != null) saveShot(bmp) else toast("Snímka sa nepodarila")
+        }, handler)
+
+        try {
+            vd.surface = reader.surface
+        } catch (e: Exception) {
+            done = true
+            finish()
+            toast("Snímka sa nepodarila")
+            return
+        }
+        handler.postDelayed({
+            if (!done) {
+                done = true
+                finish()
+                toast("Snímka sa nepodarila")
+            }
+        }, 2000)
+    }
+
     /** Samostatná snímka (bez nahrávania) v plnom rozlíšení displeja. */
     private fun takeStandaloneShot() {
         val p = projection ?: return releaseAll()
@@ -465,6 +553,9 @@ class RecorderService : Service() {
 
     private fun releaseAll() {
         stopping = true
+        try { shotReader?.close() } catch (_: Exception) {}
+        shotReader = null
+        shotBusy = false
         shake?.stop()
         shake = null
         val enc = recorder
@@ -575,12 +666,7 @@ class RecorderService : Service() {
             return b.build()
         }
 
-        val shotPi = PendingIntent.getActivity(
-            this, 20,
-            Intent(this, ShotTrampolineActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        val shotPi = shotTrampolinePi()
 
         b.setContentTitle(if (paused) "Nahrávanie pozastavené" else "Nahráva sa obrazovka")
             .setContentText(if (Prefs.load(this).shakeToStop) "Zastavíš aj zatrasením telefónu" else "Ťukni na Stop pre uloženie")
@@ -595,6 +681,28 @@ class RecorderService : Service() {
         b.addAction(R.drawable.ic_stop, "Stop", servicePi(ACTION_STOP, 3))
         return b.build()
     }
+
+    private fun shotTrampolinePi(): PendingIntent =
+        PendingIntent.getActivity(
+            this, 20,
+            Intent(this, ShotTrampolineActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+    private fun sessionNotification(): Notification =
+        NotificationCompat.Builder(this, CHANNEL_REC)
+            .setSmallIcon(R.drawable.ic_shot)
+            .setContentTitle("Režim snímok je zapnutý")
+            .setContentText("Zatras telefónom alebo ťukni na Odfotiť")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .addAction(R.drawable.ic_shot, "Odfotiť", shotTrampolinePi())
+            .addAction(R.drawable.ic_stop, "Ukončiť", servicePi(ACTION_STOP, 3))
+            .build()
 
     private fun shotNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_REC)

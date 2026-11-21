@@ -19,7 +19,8 @@ import androidx.compose.runtime.mutableStateListOf
 import sk.vespal.recshot.ui.AppRoot
 import sk.vespal.recshot.ui.RecShotTheme
 
-enum class CaptureMode { RECORD, SCREENSHOT }
+/** SCREENSHOT = okamžitá snímka (dlaždica), SHOT_SESSION = režim snímok (tlačidlo v aplikácii). */
+enum class CaptureMode { RECORD, SCREENSHOT, SHOT_SESSION }
 
 sealed class Screen {
     data object Home : Screen()
@@ -149,9 +150,18 @@ class MainActivity : ComponentActivity() {
 
     fun requestCapture(mode: CaptureMode) {
         val st = RecorderService.state.value
-        if (mode == CaptureMode.SCREENSHOT && st is RecState.Recording) {
+        if (mode != CaptureMode.RECORD && (st is RecState.Recording || st == RecState.ShotSession)) {
+            if (st == RecState.ShotSession && mode == CaptureMode.SHOT_SESSION) {
+                Toast.makeText(this, "Režim snímok beží – zatras telefónom v inej aplikácii", Toast.LENGTH_LONG).show()
+                moveTaskToBack(true)
+                return
+            }
             moveTaskToBack(true)
             RecorderService.command(this, RecorderService.ACTION_SHOT_DURING)
+            return
+        }
+        if (st == RecState.ShotSession) {
+            Toast.makeText(this, "Najprv ukonči režim snímok", Toast.LENGTH_SHORT).show()
             return
         }
         if (st != RecState.Idle) {
@@ -193,6 +203,7 @@ class MainActivity : ComponentActivity() {
             .putExtra(RecorderService.EXTRA_WIDTH, w)
             .putExtra(RecorderService.EXTRA_HEIGHT, h)
             .putExtra(RecorderService.EXTRA_DPI, resources.displayMetrics.densityDpi)
+            .putExtra(RecorderService.EXTRA_SESSION, mode == CaptureMode.SHOT_SESSION)
         startForegroundService(i)
     }
 

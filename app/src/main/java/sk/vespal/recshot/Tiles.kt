@@ -60,7 +60,8 @@ class ShotTileService : TileService() {
     }
 
     override fun onClick() {
-        if (RecorderService.state.value is RecState.Recording) {
+        val st = RecorderService.state.value
+        if (st is RecState.Recording || st == RecState.ShotSession) {
             launchMain("shot", 101, ShotTrampolineActivity::class.java)
         } else {
             launchMain(MainActivity.ACTION_QUICK_SHOT, 102)
