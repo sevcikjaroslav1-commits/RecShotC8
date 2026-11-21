@@ -42,6 +42,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -200,6 +202,10 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
     var exporting by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
     var transformer by remember { mutableStateOf<Transformer?>(null) }
+    var showNearby by remember { mutableStateOf(false) }
+    var showCompress by remember { mutableStateOf(false) }
+    if (showNearby) NearbyDialog(listOf(uri), "video/*") { showNearby = false }
+    if (showCompress) CompressDialog(uri, onDismiss = { showCompress = false })
 
     // náhľad: true = prehráva sa celé pôvodné video (počas ťahania úchytov),
     // false = prehráva sa presne výsledok strihu (zostrihané úseky za sebou)
@@ -312,7 +318,13 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             }
             Text("Upraviť video", color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             IconButton(onClick = { shareUri(ctx, uri, "video/*") }) {
-                Icon(Icons.Filled.Share, contentDescription = "Zdieľať originál", tint = C.Text)
+                Icon(Icons.Filled.Share, contentDescription = "Zdieľať", tint = C.Text)
+            }
+            IconButton(onClick = { showNearby = true }) {
+                Icon(Icons.Filled.Bluetooth, contentDescription = "Poslať cez Wi-Fi / Bluetooth", tint = C.Text)
+            }
+            IconButton(onClick = { player.pause(); showCompress = true }) {
+                Icon(Icons.Filled.Compress, contentDescription = "Komprimovať", tint = C.Text)
             }
             Button(
                 enabled = !exporting && durationMs > 0 && keptMs > 300,

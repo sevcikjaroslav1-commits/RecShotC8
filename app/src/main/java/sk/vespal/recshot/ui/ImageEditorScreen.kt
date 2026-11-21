@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -138,6 +139,8 @@ private fun Editor(bmp: Bitmap, sourceUri: Uri, onBack: () -> Unit) {
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     var saving by remember { mutableStateOf(false) }
     var savedUri by remember { mutableStateOf<Uri?>(null) }
+    var showNearby by remember { mutableStateOf(false) }
+    if (showNearby) NearbyDialog(listOf(savedUri ?: sourceUri), "image/*") { showNearby = false }
 
     val penWidth = max(bw, bh) / 160f
 
@@ -172,6 +175,9 @@ private fun Editor(bmp: Bitmap, sourceUri: Uri, onBack: () -> Unit) {
             }
             IconButton(onClick = { shareUri(ctx, savedUri ?: sourceUri, "image/*") }) {
                 Icon(Icons.Filled.Share, contentDescription = "Zdieľať", tint = C.Text)
+            }
+            IconButton(onClick = { showNearby = true }) {
+                Icon(Icons.Filled.Bluetooth, contentDescription = "Poslať cez Wi-Fi / Bluetooth", tint = C.Text)
             }
             Button(
                 enabled = !saving,

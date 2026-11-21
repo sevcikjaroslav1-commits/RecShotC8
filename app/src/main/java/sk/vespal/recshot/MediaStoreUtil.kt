@@ -77,8 +77,8 @@ object MediaStoreUtil {
     }
 
     /** Skopíruje hotový súbor (napr. export z editora) do Movies/RecShotC8. */
-    fun copyVideoToGallery(ctx: Context, file: File): Uri? {
-        val uri = newVideo(ctx, "RecShotC8_edit") ?: return null
+    fun copyVideoToGallery(ctx: Context, file: File, prefix: String = "RecShotC8_edit"): Uri? {
+        val uri = newVideo(ctx, prefix) ?: return null
         return try {
             ctx.contentResolver.openOutputStream(uri)?.use { out ->
                 file.inputStream().use { it.copyTo(out) }

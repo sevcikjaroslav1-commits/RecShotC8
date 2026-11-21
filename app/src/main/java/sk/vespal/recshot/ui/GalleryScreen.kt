@@ -9,6 +9,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.result.IntentSenderRequest
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.mutableStateListOf
@@ -133,6 +136,21 @@ fun GalleryScreen(
 
     BackHandler(enabled = selecting) { selected.clear() }
 
+    fun selectedMime(): String {
+        val sel = allItems.filter { it.uri in selected }
+        return when {
+            sel.isNotEmpty() && sel.all { it.isVideo } -> "video/*"
+            sel.isNotEmpty() && sel.none { it.isVideo } -> "image/*"
+            else -> "*/*"
+        }
+    }
+    var showNearby by remember { mutableStateOf(false) }
+    var compressUri by remember { mutableStateOf<Uri?>(null) }
+    if (showNearby) NearbyDialog(selected.toList(), selectedMime()) { showNearby = false }
+    compressUri?.let { u ->
+        CompressDialog(u, onDismiss = { compressUri = null; selected.clear() })
+    }
+
     LaunchedEffect(saved) {
         allItems = withContext(Dispatchers.IO) { MediaStoreUtil.list(ctx) }
     }
@@ -163,7 +181,7 @@ fun GalleryScreen(
                         Icon(Icons.Filled.Close, contentDescription = "Zrušiť výber", tint = C.Text)
                     }
                     Text(
-                        "Vybraté: ${selected.size}", color = C.Text, fontSize = 18.sp,
+                        "${selected.size}", color = C.Text, fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = {
@@ -175,6 +193,18 @@ fun GalleryScreen(
                         visible.forEach { if (it.uri !in selected) selected.add(it.uri) }
                     }) {
                         Icon(Icons.Filled.SelectAll, contentDescription = "Vybrať všetko", tint = C.Text)
+                    }
+                    IconButton(onClick = { shareMany(ctx, selected.toList(), selectedMime()) }) {
+                        Icon(Icons.Filled.Share, contentDescription = "Zdieľať", tint = C.Text)
+                    }
+                    IconButton(onClick = { showNearby = true }) {
+                        Icon(Icons.Filled.Bluetooth, contentDescription = "Poslať cez Wi-Fi / Bluetooth", tint = C.Text)
+                    }
+                    val singleVideo = selected.size == 1 && allItems.any { it.uri == selected[0] && it.isVideo }
+                    if (singleVideo) {
+                        IconButton(onClick = { compressUri = selected[0] }) {
+                            Icon(Icons.Filled.Compress, contentDescription = "Komprimovať", tint = C.Text)
+                        }
                     }
                     IconButton(onClick = { deleteSelected() }) {
                         Icon(Icons.Filled.Delete, contentDescription = "Vymazať", tint = C.AccentText)

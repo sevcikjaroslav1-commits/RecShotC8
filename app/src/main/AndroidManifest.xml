@@ -9,6 +9,14 @@
     <!-- plávajúce tlačidlo snímky nad inými aplikáciami -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- nájdenie Quick Share / Bluetooth pre prenos do blízkeho zariadenia -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
