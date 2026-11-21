@@ -239,7 +239,7 @@ private fun presetsFor(info: SourceInfo, hevc: Boolean): List<Preset> {
     )
 }
 
-private fun mb(bytes: Long): String {
+fun formatMb(bytes: Long): String {
     val m = bytes / 1_048_576.0
     return if (m >= 10) "${m.roundToInt()} MB" else "%.1f MB".format(m).replace('.', ',')
 }
@@ -287,13 +287,13 @@ fun CompressDialog(uri: Uri, onDismiss: () -> Unit, onDone: (Uri) -> Unit = {}) 
                     }
                     else -> {
                         Text(
-                            "Teraz: ${mb(inf.sizeBytes)} · ${min(inf.width, inf.height)}p" + if (hevc) " · kodek H.265" else "",
+                            "Teraz: ${formatMb(inf.sizeBytes)} · ${min(inf.width, inf.height)}p" + if (hevc) " · kodek H.265" else "",
                             color = C.TextDim, fontSize = 13.sp
                         )
                         Spacer(Modifier.height(12.dp))
                         presetsFor(inf, hevc).forEachIndexed { i, p ->
                             val est = ((p.videoBitrate + 128_000L) * inf.durationMs / 8000L)
-                            val estText = if (inf.sizeBytes > 0 && est >= inf.sizeBytes) "≈ bez zmeny" else "≈ ${mb(est)}"
+                            val estText = if (inf.sizeBytes > 0 && est >= inf.sizeBytes) "≈ bez zmeny" else "≈ ${formatMb(est)}"
                             Column(
                                 Modifier
                                     .fillMaxWidth()
@@ -308,7 +308,7 @@ fun CompressDialog(uri: Uri, onDismiss: () -> Unit, onDone: (Uri) -> Unit = {}) 
                                             running = false
                                             if (saved != null) {
                                                 val newSize = sourceInfo(ctx, saved).sizeBytes
-                                                resultText = "Hotovo ✓\n${mb(inf.sizeBytes)} → ${mb(newSize)}\nUložené v Galéria › RecShotC8"
+                                                resultText = "Hotovo ✓\n${formatMb(inf.sizeBytes)} → ${formatMb(newSize)}\nUložené v Galéria › RecShotC8"
                                                 RecorderService.savedCounter.value = RecorderService.savedCounter.value + 1
                                                 onDone(saved)
                                             } else {
@@ -396,4 +396,12 @@ private fun compressVideo(
         main.post { onDone(null) }
     }
     return transformer
+}
+
+fun fileSizeOf(ctx: Context, uri: Uri): Long = try {
+    ctx.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+        if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else 0L
+    } ?: 0L
+} catch (_: Exception) {
+    0L
 }

@@ -43,6 +43,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
@@ -203,6 +207,8 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
     var progress by remember { mutableFloatStateOf(0f) }
     var transformer by remember { mutableStateOf<Transformer?>(null) }
     var showNearby by remember { mutableStateOf(false) }
+    var fileSize by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(uri) { fileSize = withContext(Dispatchers.IO) { fileSizeOf(ctx, uri) } }
     var showCompress by remember { mutableStateOf(false) }
     if (showNearby) NearbyDialog(listOf(uri), "video/*") { showNearby = false }
     if (showCompress) CompressDialog(uri, onDismiss = { showCompress = false })
@@ -312,19 +318,18 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(C.Bg).systemBarsPadding().imePadding()) {
         // horná lišta
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 14.dp, top = 6.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Späť", tint = C.Text)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Späť", tint = C.Text, modifier = Modifier.size(28.dp))
             }
-            Text("Upraviť video", color = C.Text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { shareUri(ctx, uri, "video/*") }) {
-                Icon(Icons.Filled.Share, contentDescription = "Zdieľať", tint = C.Text)
-            }
-            IconButton(onClick = { showNearby = true }) {
-                Icon(Icons.Filled.Bluetooth, contentDescription = "Poslať cez Wi-Fi / Bluetooth", tint = C.Text)
-            }
-            IconButton(onClick = { player.pause(); showCompress = true }) {
-                Icon(Icons.Filled.Compress, contentDescription = "Komprimovať", tint = C.Text)
+            Column(Modifier.weight(1f)) {
+                Text("Úprava videa", color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                val info = buildString {
+                    if (durationMs > 0) append(formatDuration(durationMs))
+                    if (videoWidth > 0) append(" · $videoWidth × $videoHeight")
+                    if (fileSize > 0) append(" · " + formatMb(fileSize))
+                }
+                Text(info, color = C.TextDim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Button(
                 enabled = !exporting && durationMs > 0 && keptMs > 300,
@@ -361,7 +366,28 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = C.Accent),
-            ) { Text("Exportovať", fontWeight = FontWeight.SemiBold) }
+            ) {
+                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Exportovať", fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        // farebné akcie: zdieľať, Wi-Fi/BT, zmenšiť
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ActionChip("Zdieľať", Icons.Filled.Share, Color(0xFF13261F), Color(0xFF21403A), Color(0xFF7FE0B0), Modifier.weight(1f)) {
+                shareUri(ctx, uri, "video/*")
+            }
+            ActionChip("Wi-Fi / BT", Icons.Filled.Wifi, Color(0xFF132036), Color(0xFF24406A), Color(0xFF8FBEFF), Modifier.weight(1f)) {
+                showNearby = true
+            }
+            ActionChip("Zmenšiť", Icons.Filled.Compress, Color(0xFF1C1929), Color(0xFF2F2950), Color(0xFFC9B8FF), Modifier.weight(1f)) {
+                player.pause()
+                showCompress = true
+            }
         }
 
         // náhľad
@@ -1078,5 +1104,31 @@ private fun CropOverlay(
                 drawLine(C.Trim, p, Offset(p.x, p.y + len * sy), strokeWidth = w)
             }
         }
+    }
+}
+
+@Composable
+private fun ActionChip(
+    label: String,
+    icon: ImageVector,
+    bg: Color,
+    border: Color,
+    fg: Color,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(7.dp))
+        Text(label, color = fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
