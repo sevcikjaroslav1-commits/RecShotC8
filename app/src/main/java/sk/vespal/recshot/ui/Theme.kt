@@ -17,6 +17,7 @@ object C {
     val AccentText = Color(0xFFFF8A6E)
     val Blue = Color(0xFF6EA8FF)
     val BlueSoft = Color(0xFF1F2A3D)
+    val BlueFill = Color(0xFF2F6FE0)
     val Trim = Color(0xFFFFC24A)
 }
 
