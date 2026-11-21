@@ -221,38 +221,6 @@ fun HomeScreen(
             }
         }
 
-        // čistý záznam
-        Spacer(Modifier.height(16.dp))
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(C.Surface)
-                .border(1.dp, C.Border, RoundedCornerShape(18.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(C.AccentSoft),
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Filled.VisibilityOff, contentDescription = null, tint = C.AccentText) }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Čistý záznam", color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (settings.shakeToStop) "Nič neprekrýva obrazovku · zatrasenie = stop"
-                    else "Nič neprekrýva obrazovku · stop v notifikácii",
-                    color = C.TextDim, fontSize = 12.sp, lineHeight = 16.sp
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = settings.shakeToStop,
-                onCheckedChange = { update(settings.copy(shakeToStop = it)) },
-                colors = SwitchDefaults.colors(checkedTrackColor = C.Accent),
-            )
-        }
-
         // posledné
         Row(
             Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 10.dp),
@@ -381,7 +349,7 @@ private fun ShotSessionBar() {
         Column(Modifier.weight(1f)) {
             Text("Režim snímok je zapnutý", color = Color(0xFFB9D3FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                "Prejdi do inej aplikácie a zatras telefónom alebo ťukni Odfotiť v notifikácii.",
+                "Prejdi do inej aplikácie a ťukni na modré plávajúce tlačidlo.",
                 color = C.TextDim, fontSize = 12.sp, lineHeight = 16.sp
             )
         }

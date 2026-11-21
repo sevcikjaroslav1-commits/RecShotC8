@@ -8,6 +8,7 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.DisplayMetrics
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -64,6 +65,15 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this, "Bez povolenia na zvuk – video bude bez zvuku", Toast.LENGTH_SHORT).show()
             }
             launchProjection(CaptureMode.RECORD)
+        }
+
+    private val overlayPermission =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            if (Settings.canDrawOverlays(this)) {
+                launchProjection(CaptureMode.SHOT_SESSION)
+            } else {
+                Toast.makeText(this, "Bez povolenia sa plávajúce tlačidlo nedá zobraziť", Toast.LENGTH_LONG).show()
+            }
         }
 
     private val notifPermission =
@@ -152,7 +162,7 @@ class MainActivity : ComponentActivity() {
         val st = RecorderService.state.value
         if (mode != CaptureMode.RECORD && (st is RecState.Recording || st == RecState.ShotSession)) {
             if (st == RecState.ShotSession && mode == CaptureMode.SHOT_SESSION) {
-                Toast.makeText(this, "Režim snímok beží – zatras telefónom v inej aplikácii", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Režim snímok beží – ťukni na modré plávajúce tlačidlo", Toast.LENGTH_LONG).show()
                 moveTaskToBack(true)
                 return
             }
@@ -166,6 +176,17 @@ class MainActivity : ComponentActivity() {
         }
         if (st != RecState.Idle) {
             Toast.makeText(this, "Nahrávanie už beží", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (mode == CaptureMode.SHOT_SESSION && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Povoľ RecShotC8: Zobrazovať cez iné aplikácie", Toast.LENGTH_LONG).show()
+            try {
+                overlayPermission.launch(
+                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                )
+            } catch (_: Exception) {
+                overlayPermission.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+            }
             return
         }
         if (mode == CaptureMode.RECORD && Prefs.load(this).anyAudio &&

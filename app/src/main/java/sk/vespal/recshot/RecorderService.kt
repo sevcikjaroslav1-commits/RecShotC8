@@ -110,6 +110,7 @@ class RecorderService : Service() {
     private var withMic = false
     private var withSystem = false
     private var shotReader: ImageReader? = null
+    private var floating: FloatingShotButton? = null
     private var shotBusy = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -423,8 +424,18 @@ class RecorderService : Service() {
             nm?.notify(NOTIF_ONGOING, sessionNotification())
         } catch (_: SecurityException) {
         }
-        shake = ShakeDetector(this) { handler.postDelayed({ sessionShot() }, 300) }.also { it.start() }
-        toast("Režim snímok: prejdi do aplikácie a zatras telefónom")
+        val fb = FloatingShotButton(
+            this, screenW, screenH,
+            onShot = { sessionShot() },
+            onClose = { stopRecording() },
+        )
+        if (fb.show()) {
+            floating = fb
+            toast("Ťukni na modré tlačidlo a obrazovka sa odfotí")
+        } else {
+            toast("Povoľ „Zobrazovať cez iné aplikácie“ pre RecShotC8")
+            releaseAll()
+        }
     }
 
     /** Jedna snímka v režime snímok – obraz sa na chvíľu pustí do ImageReadera. */
@@ -440,9 +451,10 @@ class RecorderService : Service() {
 
         try { reader.acquireLatestImage()?.close() } catch (_: Exception) {}
 
-        fun finish() {
+        fun finish(ok: Boolean) {
             try { vd.surface = null } catch (_: Exception) {}
             shotBusy = false
+            floating?.restore(ok)
         }
 
         reader.setOnImageAvailableListener({ rd ->
@@ -455,25 +467,30 @@ class RecorderService : Service() {
             done = true
             val bmp = imageToBitmap(img, w, h)
             img.close()
-            finish()
+            finish(bmp != null)
             if (bmp != null) saveShot(bmp) else toast("Snímka sa nepodarila")
         }, handler)
 
-        try {
-            vd.surface = reader.surface
-        } catch (e: Exception) {
-            done = true
-            finish()
-            toast("Snímka sa nepodarila")
-            return
-        }
+        // najprv skryť plávajúce tlačidlo, aby nebolo na snímke
+        floating?.hideForCapture()
         handler.postDelayed({
-            if (!done) {
+            if (done) return@postDelayed
+            try {
+                vd.surface = reader.surface
+            } catch (e: Exception) {
                 done = true
-                finish()
+                finish(false)
                 toast("Snímka sa nepodarila")
+                return@postDelayed
             }
-        }, 2000)
+            handler.postDelayed({
+                if (!done) {
+                    done = true
+                    finish(false)
+                    toast("Snímka sa nepodarila")
+                }
+            }, 2000)
+        }, 180)
     }
 
     /** Samostatná snímka (bez nahrávania) v plnom rozlíšení displeja. */
@@ -553,6 +570,8 @@ class RecorderService : Service() {
 
     private fun releaseAll() {
         stopping = true
+        floating?.remove()
+        floating = null
         try { shotReader?.close() } catch (_: Exception) {}
         shotReader = null
         shotBusy = false
@@ -694,13 +713,12 @@ class RecorderService : Service() {
         NotificationCompat.Builder(this, CHANNEL_REC)
             .setSmallIcon(R.drawable.ic_shot)
             .setContentTitle("Režim snímok je zapnutý")
-            .setContentText("Zatras telefónom alebo ťukni na Odfotiť")
+            .setContentText("Ťukni na modré plávajúce tlačidlo")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(R.drawable.ic_shot, "Odfotiť", shotTrampolinePi())
             .addAction(R.drawable.ic_stop, "Ukončiť", servicePi(ACTION_STOP, 3))
             .build()
 
