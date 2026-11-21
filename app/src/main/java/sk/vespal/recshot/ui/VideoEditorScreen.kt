@@ -96,7 +96,20 @@ import java.nio.ByteBuffer
 import kotlin.math.roundToInt
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.Crop as CropEffect
 import androidx.media3.effect.OverlayEffect
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.material.icons.filled.Crop
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.min
 import androidx.media3.effect.SpeedChangeEffect
 import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextOverlay
@@ -121,7 +134,7 @@ import sk.vespal.recshot.RecorderService
 import java.io.File
 import kotlin.math.max
 
-private enum class VTool(val label: String) { CUT("Strih"), SPEED("Rýchlosť"), TEXT("Text"), MUSIC("Hudba"), AUDIO("Zvuk") }
+private enum class VTool(val label: String) { CUT("Strih"), CROP("Orezať"), SPEED("Rýchlosť"), TEXT("Text"), MUSIC("Hudba"), AUDIO("Zvuk") }
 
 private val speeds = listOf(0.25f, 0.5f, 1f, 1.5f, 2f, 3f)
 private val textColors = listOf(Color.White, Color(0xFFFFC24A), Color(0xFFE8462A), Color(0xFF6EA8FF), Color.Black)
@@ -143,9 +156,11 @@ private data class EditParams(
     val textColor: Int,
     val videoHeight: Int,
     val musicUri: Uri?,
+    /** Orezanie obrazu v zlomkoch 0..1 (ľavo, hore, vpravo, dole). */
+    val crop: Rect,
 )
 
-private class VideoInfo(val durationMs: Long, val height: Int, val frames: List<ImageBitmap>)
+private class VideoInfo(val durationMs: Long, val width: Int, val height: Int, val frames: List<ImageBitmap>)
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -162,6 +177,8 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
 
     var durationMs by remember { mutableLongStateOf(0L) }
     var videoHeight by remember { mutableIntStateOf(1920) }
+    var videoWidth by remember { mutableIntStateOf(1080) }
+    var crop by remember { mutableStateOf(FULL_CROP) }
     var thumbs by remember { mutableStateOf<List<ImageBitmap>>(emptyList()) }
     var range by remember { mutableStateOf(0f..1f) }
     var positionMs by remember { mutableLongStateOf(0L) }
@@ -200,6 +217,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
         val info = withContext(Dispatchers.IO) { loadInfo(ctx, uri, 8) }
         durationMs = info.durationMs
         videoHeight = info.height
+        videoWidth = info.width
         thumbs = info.frames
     }
 
@@ -316,6 +334,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                         textColor = textColor.toArgb(),
                         videoHeight = videoHeight,
                         musicUri = musicUri,
+                        crop = crop,
                     )
                     transformer = exportVideo(ctx, uri, params) { saved ->
                         exporting = false
@@ -354,6 +373,15 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxSize()
             )
+            if (tool == VTool.CROP || !isFullCrop(crop)) {
+                CropOverlay(
+                    crop = crop,
+                    editable = tool == VTool.CROP,
+                    videoW = videoWidth,
+                    videoH = videoHeight,
+                    onChange = { crop = it },
+                )
+            }
             if (text.isNotBlank()) {
                 val align = when (textPos) {
                     0 -> Alignment.TopCenter
@@ -495,6 +523,29 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     NudgeRow("Koniec", formatPrecise(endMs), { nudge(false, -100) }, { nudge(false, 100) })
                 }
 
+                VTool.CROP -> Column {
+                    Text(
+                        "Potiahni rohy rámika na videu. Čo je mimo rámika, nebude vo výslednom videu.",
+                        color = C.TextDim, fontSize = 13.sp, lineHeight = 18.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SmallChip("Celé", isFullCrop(crop)) { crop = FULL_CROP }
+                        SmallChip("Bez hornej lišty", false) { crop = Rect(crop.left, 0.045f, crop.right, crop.bottom) }
+                        SmallChip("Bez spodnej lišty", false) { crop = Rect(crop.left, crop.top, crop.right, 0.955f) }
+                        SmallChip("1:1", false) { crop = aspectCrop(1f, videoWidth, videoHeight) }
+                        SmallChip("9:16", false) { crop = aspectCrop(9f / 16f, videoWidth, videoHeight) }
+                        SmallChip("16:9", false) { crop = aspectCrop(16f / 9f, videoWidth, videoHeight) }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    val outW = ((crop.right - crop.left) * videoWidth).roundToInt()
+                    val outH = ((crop.bottom - crop.top) * videoHeight).roundToInt()
+                    Text("Výsledok: $outW × $outH px", color = C.Trim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+
                 VTool.SPEED -> Row(
                     Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -603,6 +654,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             VTool.entries.forEach { t ->
                 val icon: ImageVector = when (t) {
                     VTool.CUT -> Icons.Filled.ContentCut
+                    VTool.CROP -> Icons.Filled.Crop
                     VTool.SPEED -> Icons.Filled.Speed
                     VTool.TEXT -> Icons.Filled.TextFields
                     VTool.MUSIC -> Icons.Filled.MusicNote
@@ -614,6 +666,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     VTool.MUSIC -> musicUri != null
                     VTool.AUDIO -> originalVolume != 1f || (musicUri != null && musicVolume != 1f)
                     VTool.CUT -> range.start > 0f || range.endInclusive < 1f
+                    VTool.CROP -> !isFullCrop(crop)
                 }
                 ToolTab(t.label, icon, tool == t, active, Modifier.weight(1f)) { tool = t }
             }
@@ -697,6 +750,7 @@ private fun loadInfo(ctx: Context, uri: Uri, count: Int): VideoInfo {
         val h = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1920
         val rot = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
         val displayH = if (rot == 90 || rot == 270) w else h
+        val displayW = if (rot == 90 || rot == 270) h else w
         val frames = ArrayList<ImageBitmap>()
         if (d > 0) {
             for (i in 0 until count) {
@@ -705,9 +759,9 @@ private fun loadInfo(ctx: Context, uri: Uri, count: Int): VideoInfo {
                 if (bmp != null) frames.add(bmp.asImageBitmap())
             }
         }
-        VideoInfo(d, displayH, frames)
+        VideoInfo(d, displayW, displayH, frames)
     } catch (e: Exception) {
-        VideoInfo(0L, 1920, emptyList())
+        VideoInfo(0L, 1080, 1920, emptyList())
     } finally {
         try { mmr.release() } catch (_: Exception) {}
     }
@@ -716,6 +770,11 @@ private fun loadInfo(ctx: Context, uri: Uri, count: Int): VideoInfo {
 @OptIn(UnstableApi::class)
 private fun effectsFor(p: EditParams): Effects {
     val video = ArrayList<Effect>()
+    if (!isFullCrop(p.crop)) {
+        val c = p.crop
+        // Crop v súradniciach -1..1 (y smeruje hore)
+        video.add(CropEffect(c.left * 2f - 1f, c.right * 2f - 1f, 1f - c.bottom * 2f, 1f - c.top * 2f))
+    }
     val audio = ArrayList<AudioProcessor>()
     if (p.speed != 1f) {
         video.add(SpeedChangeEffect(p.speed))
@@ -902,5 +961,110 @@ private fun NudgeButton(label: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Text(label, color = C.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+private val FULL_CROP = Rect(0f, 0f, 1f, 1f)
+
+private fun isFullCrop(c: Rect): Boolean =
+    c.left <= 0.001f && c.top <= 0.001f && c.right >= 0.999f && c.bottom >= 0.999f
+
+/** Vycentrovaný výrez s daným pomerom strán (šírka / výška). */
+private fun aspectCrop(target: Float, videoW: Int, videoH: Int): Rect {
+    if (videoW <= 0 || videoH <= 0) return FULL_CROP
+    val videoAr = videoW.toFloat() / videoH
+    return if (videoAr > target) {
+        val w = target / videoAr
+        Rect((1f - w) / 2f, 0f, (1f + w) / 2f, 1f)
+    } else {
+        val h = videoAr / target
+        Rect(0f, (1f - h) / 2f, 1f, (1f + h) / 2f)
+    }
+}
+
+/** Rámik na orezanie obrazu nad náhľadom videa. */
+@Composable
+private fun CropOverlay(
+    crop: Rect,
+    editable: Boolean,
+    videoW: Int,
+    videoH: Int,
+    onChange: (Rect) -> Unit,
+) {
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    val current by rememberUpdatedState(crop)
+    val change by rememberUpdatedState(onChange)
+    val k = if (size.width == 0 || videoW <= 0 || videoH <= 0) 0f
+    else min(size.width / videoW.toFloat(), size.height / videoH.toFloat())
+    val dw = videoW * k
+    val dh = videoH * k
+    val ox = (size.width - dw) / 2f
+    val oy = (size.height - dh) / 2f
+
+    var mod = Modifier.fillMaxSize().onSizeChanged { size = it }
+    if (editable) {
+        mod = mod.pointerInput(size, videoW, videoH) {
+            var handle = -1 // 0 ĽH, 1 PH, 2 ĽD, 3 PD, 4 posun
+            val grab = 40.dp.toPx()
+            detectDragGestures(
+                onDragStart = { p ->
+                    val c = current
+                    val corners = listOf(
+                        Offset(ox + c.left * dw, oy + c.top * dh),
+                        Offset(ox + c.right * dw, oy + c.top * dh),
+                        Offset(ox + c.left * dw, oy + c.bottom * dh),
+                        Offset(ox + c.right * dw, oy + c.bottom * dh),
+                    )
+                    val idx = corners.indexOfFirst { (it - p).getDistance() < grab }
+                    val inside = p.x in (ox + c.left * dw)..(ox + c.right * dw) &&
+                        p.y in (oy + c.top * dh)..(oy + c.bottom * dh)
+                    handle = if (idx >= 0) idx else if (inside) 4 else -1
+                },
+                onDrag = { ch, d ->
+                    if (handle < 0 || dw <= 0f || dh <= 0f) return@detectDragGestures
+                    ch.consume()
+                    val fx = d.x / dw
+                    val fy = d.y / dh
+                    val c = current
+                    val m = 0.1f
+                    val n = when (handle) {
+                        0 -> Rect((c.left + fx).coerceIn(0f, c.right - m), (c.top + fy).coerceIn(0f, c.bottom - m), c.right, c.bottom)
+                        1 -> Rect(c.left, (c.top + fy).coerceIn(0f, c.bottom - m), (c.right + fx).coerceIn(c.left + m, 1f), c.bottom)
+                        2 -> Rect((c.left + fx).coerceIn(0f, c.right - m), c.top, c.right, (c.bottom + fy).coerceIn(c.top + m, 1f))
+                        3 -> Rect(c.left, c.top, (c.right + fx).coerceIn(c.left + m, 1f), (c.bottom + fy).coerceIn(c.top + m, 1f))
+                        else -> c.translate(fx.coerceIn(-c.left, 1f - c.right), fy.coerceIn(-c.top, 1f - c.bottom))
+                    }
+                    change(n)
+                },
+                onDragEnd = { handle = -1 },
+                onDragCancel = { handle = -1 },
+            )
+        }
+    }
+
+    Canvas(mod) {
+        if (dw <= 0f) return@Canvas
+        val l = ox + crop.left * dw
+        val t = oy + crop.top * dh
+        val r = ox + crop.right * dw
+        val b = oy + crop.bottom * dh
+        val dim = Color(0xA6000000)
+        drawRect(dim, Offset(ox, oy), Size(dw, t - oy))
+        drawRect(dim, Offset(ox, b), Size(dw, oy + dh - b))
+        drawRect(dim, Offset(ox, t), Size(l - ox, b - t))
+        drawRect(dim, Offset(r, t), Size(ox + dw - r, b - t))
+        if (editable) {
+            drawRect(C.Trim, Offset(l, t), Size(r - l, b - t), style = Stroke(width = 2.dp.toPx()))
+            val len = 18.dp.toPx()
+            val w = 4.dp.toPx()
+            // rohové úchyty
+            listOf(
+                Triple(Offset(l, t), 1f, 1f), Triple(Offset(r, t), -1f, 1f),
+                Triple(Offset(l, b), 1f, -1f), Triple(Offset(r, b), -1f, -1f),
+            ).forEach { (p, sx, sy) ->
+                drawLine(C.Trim, p, Offset(p.x + len * sx, p.y), strokeWidth = w)
+                drawLine(C.Trim, p, Offset(p.x, p.y + len * sy), strokeWidth = w)
+            }
+        }
     }
 }
