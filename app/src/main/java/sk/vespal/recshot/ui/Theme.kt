@@ -19,6 +19,7 @@ object C {
     val BlueSoft = Color(0xFF1F2A3D)
     val BlueFill = Color(0xFF2F6FE0)
     val Trim = Color(0xFFFFC24A)
+    val PlayGreen = Color(0xFF3DDC84)
 }
 
 private val scheme = darkColorScheme(

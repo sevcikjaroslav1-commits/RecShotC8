@@ -89,6 +89,11 @@ import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.BaseAudioProcessor
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material3.Slider
+import java.nio.ByteBuffer
+import kotlin.math.roundToInt
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.OverlayEffect
@@ -128,6 +133,10 @@ private data class EditParams(
     val durationMs: Long,
     val cutMiddle: Boolean,
     val removeAudio: Boolean,
+    /** Hlasitosť pôvodného zvuku 0..2 (1 = originál). */
+    val originalVolume: Float,
+    /** Hlasitosť hudby 0..2. */
+    val musicVolume: Float,
     val speed: Float,
     val text: String,
     val textPos: Int, // 0 hore, 1 stred, 2 dole
@@ -160,7 +169,10 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
 
     var tool by remember { mutableStateOf(VTool.CUT) }
     var cutMiddle by remember { mutableStateOf(false) }
-    var removeAudio by remember { mutableStateOf(false) }
+    var originalVolume by remember { mutableFloatStateOf(1f) }
+    var musicVolume by remember { mutableFloatStateOf(1f) }
+    val removeAudio = originalVolume < 0.01f
+    var playheadMs by remember { mutableLongStateOf(0L) }
     var speed by remember { mutableFloatStateOf(1f) }
     var text by remember { mutableStateOf("") }
     var textPos by remember { mutableIntStateOf(2) }
@@ -242,7 +254,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
     LaunchedEffect(durationMs, cutMiddle) {
         if (durationMs > 0) showResult()
     }
-    LaunchedEffect(removeAudio) { player.volume = if (removeAudio) 0f else 1f }
+    LaunchedEffect(originalVolume) { player.volume = originalVolume.coerceIn(0f, 1f) }
 
     // pozícia vo výslednom videu + priebeh exportu
     LaunchedEffect(player) {
@@ -254,6 +266,12 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                 val idx = player.currentMediaItemIndex
                 val before = segments.take(idx).sumOf { it.last + 1 - it.first }
                 before + player.currentPosition
+            }
+            // zelená čiara: miesto v pôvodnom videu
+            playheadMs = if (scrubbing) {
+                player.currentPosition
+            } else {
+                (segments.getOrNull(player.currentMediaItemIndex)?.first ?: 0L) + player.currentPosition
             }
             transformer?.let { t ->
                 val holder = ProgressHolder()
@@ -290,6 +308,8 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                         durationMs = durationMs,
                         cutMiddle = cutMiddle,
                         removeAudio = removeAudio,
+                        originalVolume = originalVolume,
+                        musicVolume = musicVolume,
                         speed = speed,
                         text = text.trim(),
                         textPos = textPos,
@@ -417,6 +437,22 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                 ),
                 modifier = Modifier.fillMaxSize()
             )
+            // zelená čiara = aktuálne prehrávané miesto
+            if (durationMs > 0) {
+                val frac = (playheadMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                Box(Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(frac)) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(C.PlayGreen)
+                        )
+                    }
+                }
+            }
         }
 
         // panel aktuálneho nástroja
@@ -502,21 +538,20 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     )
                 }
 
-                VTool.AUDIO -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.VolumeOff, contentDescription = null, tint = C.AccentText)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Odstrániť pôvodný zvuk", color = C.Text, fontSize = 14.sp)
-                        Text(
-                            if (musicUri != null) "Ostane iba vybraná hudba" else "Video bude bez zvuku",
-                            color = C.TextDim, fontSize = 12.sp
+                VTool.AUDIO -> Column {
+                    VolumeRow(
+                        title = "Pôvodný zvuk videa",
+                        value = originalVolume,
+                        onChange = { originalVolume = it },
+                    )
+                    if (musicUri != null) {
+                        Spacer(Modifier.height(8.dp))
+                        VolumeRow(
+                            title = "Hudba",
+                            value = musicVolume,
+                            onChange = { musicVolume = it },
                         )
                     }
-                    Switch(
-                        checked = removeAudio,
-                        onCheckedChange = { removeAudio = it },
-                        colors = SwitchDefaults.colors(checkedTrackColor = C.Accent),
-                    )
                 }
             }
 
@@ -550,7 +585,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     VTool.SPEED -> speed != 1f
                     VTool.TEXT -> text.isNotBlank()
                     VTool.MUSIC -> musicUri != null
-                    VTool.AUDIO -> removeAudio
+                    VTool.AUDIO -> originalVolume != 1f || (musicUri != null && musicVolume != 1f)
                     VTool.CUT -> range.start > 0f || range.endInclusive < 1f
                 }
                 ToolTab(t.label, icon, tool == t, active, Modifier.weight(1f)) { tool = t }
@@ -659,6 +694,9 @@ private fun effectsFor(p: EditParams): Effects {
         video.add(SpeedChangeEffect(p.speed))
         audio.add(SonicAudioProcessor().apply { setSpeed(p.speed) })
     }
+    if (p.originalVolume != 1f && !p.removeAudio) {
+        audio.add(GainAudioProcessor(p.originalVolume))
+    }
     if (p.text.isNotBlank()) {
         val span = SpannableString(p.text)
         val px = max(28, p.videoHeight / 22)
@@ -732,9 +770,11 @@ private fun exportVideo(ctx: Context, uri: Uri, p: EditParams, onDone: (Uri?) ->
 
         val music = p.musicUri
         if (music != null) {
-            val musicItem = EditedMediaItem.Builder(MediaItem.fromUri(music))
-                .setRemoveVideo(true)
-                .build()
+            val musicBuilder = EditedMediaItem.Builder(MediaItem.fromUri(music)).setRemoveVideo(true)
+            if (p.musicVolume != 1f) {
+                musicBuilder.setEffects(Effects(listOf<AudioProcessor>(GainAudioProcessor(p.musicVolume)), emptyList()))
+            }
+            val musicItem = musicBuilder.build()
             @Suppress("DEPRECATION")
             sequences.add(EditedMediaItemSequence(listOf(musicItem), /* isLooping= */ true))
         }
@@ -747,3 +787,58 @@ private fun exportVideo(ctx: Context, uri: Uri, p: EditParams, onDone: (Uri?) ->
     }
     return transformer
 }
+
+@Composable
+private fun VolumeRow(title: String, value: Float, onChange: (Float) -> Unit) {
+    val pct = (value * 100).roundToInt()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            if (value < 0.01f) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+            contentDescription = null,
+            tint = if (value < 0.01f) C.AccentText else C.Text
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(title, color = C.Text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text(
+            if (value < 0.01f) "Vypnutý" else "$pct %",
+            color = if (value < 0.01f) C.AccentText else C.Trim,
+            fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+        )
+    }
+    Slider(
+        value = value,
+        onValueChange = { v -> onChange(if (v in 0.95f..1.05f) 1f else v) },
+        valueRange = 0f..2f,
+        colors = SliderDefaults.colors(thumbColor = C.Trim, activeTrackColor = C.Trim),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SmallChip("Vypnúť", value < 0.01f) { onChange(0f) }
+        SmallChip("50 %", pct == 50) { onChange(0.5f) }
+        SmallChip("Originál", pct == 100) { onChange(1f) }
+        SmallChip("150 %", pct == 150) { onChange(1.5f) }
+    }
+}
+
+/** Zosilnenie / zoslabenie zvuku (PCM 16-bit) pri exporte. */
+@UnstableApi
+private class GainAudioProcessor(private val gain: Float) : BaseAudioProcessor() {
+    override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        if (inputAudioFormat.encoding != C_PCM16) {
+            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
+        }
+        return if (gain == 1f) AudioProcessor.AudioFormat.NOT_SET else inputAudioFormat
+    }
+
+    override fun queueInput(inputBuffer: ByteBuffer) {
+        val remaining = inputBuffer.remaining()
+        if (remaining == 0) return
+        val out = replaceOutputBuffer(remaining)
+        while (inputBuffer.remaining() >= 2) {
+            val v = (inputBuffer.short * gain).roundToInt().coerceIn(-32768, 32767)
+            out.putShort(v.toShort())
+        }
+        out.flip()
+    }
+}
+
+private const val C_PCM16 = androidx.media3.common.C.ENCODING_PCM_16BIT
