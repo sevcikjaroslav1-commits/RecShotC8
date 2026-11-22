@@ -115,7 +115,7 @@ fun HomeScreen(
                 Box(Modifier.size(14.dp).clip(CircleShape).background(Color.White))
             }
             Spacer(Modifier.width(10.dp))
-            Text("RecShotC8", color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("RecC8", color = C.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             LangSwitch()
         }
 

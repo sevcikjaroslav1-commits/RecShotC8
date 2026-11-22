@@ -438,7 +438,7 @@ class RecorderService : Service() {
             floating = fb
             toast(tr("Ťukni na modré tlačidlo a obrazovka sa odfotí", "Tap the blue button to take a screenshot"))
         } else {
-            toast(tr("Povoľ „Zobrazovať cez iné aplikácie“ pre RecShotC8", "Allow “Display over other apps” for RecShotC8"))
+            toast(tr("Povoľ „Zobrazovať cez iné aplikácie“ pre RecC8", "Allow “Display over other apps” for RecC8"))
             releaseAll()
         }
     }

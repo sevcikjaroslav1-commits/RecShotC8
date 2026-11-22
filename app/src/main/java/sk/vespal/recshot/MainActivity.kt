@@ -180,7 +180,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (mode == CaptureMode.SHOT_SESSION && !Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, tr("Povoľ RecShotC8: Zobrazovať cez iné aplikácie", "Allow RecShotC8: Display over other apps"), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, tr("Povoľ RecC8: Zobrazovať cez iné aplikácie", "Allow RecC8: Display over other apps"), Toast.LENGTH_LONG).show()
             try {
                 overlayPermission.launch(
                     Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
