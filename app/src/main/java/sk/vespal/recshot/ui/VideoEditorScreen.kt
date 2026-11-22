@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -175,6 +176,7 @@ private data class EditParams(
 private class VideoInfo(val durationMs: Long, val width: Int, val height: Int, val frames: List<ImageBitmap>)
 
 @OptIn(UnstableApi::class)
+@kotlin.OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
     val ctx = LocalContext.current
@@ -483,8 +485,14 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             )
         }
 
-        // časová os
-        Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(60.dp)) {
+        // časová os – odsadená od krajov (mimo zóny gesta Späť) + gesto Späť tu vypnuté
+        Box(
+            Modifier
+                .padding(horizontal = 36.dp)
+                .fillMaxWidth()
+                .height(64.dp)
+                .systemGestureExclusion()
+        ) {
             Row(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(C.SurfaceHi)) {
                 thumbs.forEach { t ->
                     Image(
@@ -514,12 +522,31 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     activeTrackColor = C.Trim.copy(alpha = 0.55f),
                     inactiveTrackColor = Color(0x99000000),
                 ),
+                startThumb = { TrimHandle(isStart = true) },
+                endThumb = { TrimHandle(isStart = false) },
                 modifier = Modifier.fillMaxSize()
             )
+            // stmavenie vystrihnutých častí
+            Box(Modifier.fillMaxSize().padding(horizontal = 9.dp)) {
+                if (range.start > 0f) {
+                    Box(
+                        Modifier.fillMaxHeight().fillMaxWidth(range.start)
+                            .align(Alignment.CenterStart)
+                            .background(Color(0x99000000))
+                    )
+                }
+                if (range.endInclusive < 1f) {
+                    Box(
+                        Modifier.fillMaxHeight().fillMaxWidth(1f - range.endInclusive)
+                            .align(Alignment.CenterEnd)
+                            .background(Color(0x99000000))
+                    )
+                }
+            }
             // zelená čiara = aktuálne prehrávané miesto
             if (durationMs > 0) {
                 val frac = (playheadMs.toFloat() / durationMs).coerceIn(0f, 1f)
-                Box(Modifier.fillMaxSize().padding(horizontal = 10.dp)) {
+                Box(Modifier.fillMaxSize().padding(horizontal = 9.dp)) {
                     Box(Modifier.fillMaxHeight().fillMaxWidth(frac)) {
                         Box(
                             Modifier
@@ -1136,5 +1163,23 @@ private fun ActionChip(
         Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(7.dp))
         Text(label, color = fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+
+/** Žltý úchyt strihu: 18 dp široký, s dvoma čiarkami (rukoväť). */
+@Composable
+private fun TrimHandle(isStart: Boolean) {
+    val shape = if (isStart) RoundedCornerShape(topStart = 7.dp, bottomStart = 7.dp, topEnd = 3.dp, bottomEnd = 3.dp)
+    else RoundedCornerShape(topStart = 3.dp, bottomStart = 3.dp, topEnd = 7.dp, bottomEnd = 7.dp)
+    Box(
+        Modifier.width(18.dp).height(64.dp).clip(shape).background(C.Trim),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            repeat(2) {
+                Box(Modifier.width(2.dp).height(20.dp).clip(RoundedCornerShape(1.dp)).background(Color(0xFF5A3E00)))
+            }
+        }
     }
 }
