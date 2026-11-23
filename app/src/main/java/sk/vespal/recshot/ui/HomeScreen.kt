@@ -6,6 +6,12 @@ import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -368,7 +374,18 @@ private fun AudioBar(s: AudioRecState) {
             .padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(if (s.paused) C.TextDim else Color(0xFFFF5A5A)))
+            // blikajúca červená bodka počas nahrávania
+            val blink by rememberInfiniteTransition(label = "blink").animateFloat(
+                initialValue = 1f, targetValue = 0.15f,
+                animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+                label = "dot",
+            )
+            Box(
+                Modifier.size(10.dp)
+                    .alpha(if (s.paused) 1f else blink)
+                    .clip(CircleShape)
+                    .background(if (s.paused) C.TextDim else Color(0xFFFF5A5A))
+            )
             Spacer(Modifier.width(10.dp))
             Text(
                 if (s.paused) tr("Pozastavené · mikrofón", "Paused · microphone") else tr("Nahrávam zvuk · mikrofón", "Recording audio · microphone"),
