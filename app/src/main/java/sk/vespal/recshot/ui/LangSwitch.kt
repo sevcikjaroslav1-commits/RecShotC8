@@ -36,10 +36,10 @@ fun LangSwitch() {
     val ctx = LocalContext.current
     Row(
         Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(C.Surface)
-            .border(1.dp, C.Border, RoundedCornerShape(14.dp))
-            .padding(3.dp),
+            .border(1.dp, C.Border, RoundedCornerShape(10.dp))
+            .padding(2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         LangButton("SK", Lang.code == "sk", { slovakFlag() }) { Lang.set(ctx, "sk") }
@@ -51,26 +51,26 @@ fun LangSwitch() {
 private fun LangButton(code: String, selected: Boolean, flag: DrawScope.() -> Unit, onClick: () -> Unit) {
     Row(
         Modifier
-            .height(34.dp)
-            .clip(RoundedCornerShape(11.dp))
+            .height(26.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(if (selected) Color(0xFF2A2D36) else Color.Transparent)
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 9.dp),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
-                .size(width = 21.dp, height = 14.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .border(0.5.dp, Color(0x40FFFFFF), RoundedCornerShape(3.dp))
+                .size(width = 15.dp, height = 10.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .border(0.5.dp, Color(0x40FFFFFF), RoundedCornerShape(2.dp))
         ) {
-            Canvas(Modifier.size(width = 21.dp, height = 14.dp)) { flag() }
+            Canvas(Modifier.size(width = 15.dp, height = 10.dp)) { flag() }
         }
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(4.dp))
         Text(
             code,
             color = if (selected) Color.White else Color(0xFF8C909A),
-            fontSize = 12.sp, fontWeight = FontWeight.Bold
+            fontSize = 10.sp, fontWeight = FontWeight.Bold
         )
     }
 }
