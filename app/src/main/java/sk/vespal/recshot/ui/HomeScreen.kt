@@ -2,6 +2,7 @@ package sk.vespal.recshot.ui
 
 import sk.vespal.recshot.tr
 import android.net.Uri
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
@@ -49,6 +51,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,6 +67,8 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import sk.vespal.recshot.AudioRecState
+import sk.vespal.recshot.AudioRecorderService
 import sk.vespal.recshot.CaptureMode
 import sk.vespal.recshot.GalleryItem
 import sk.vespal.recshot.MediaStoreUtil
@@ -119,15 +125,15 @@ fun HomeScreen(
             LangSwitch()
         }
 
-        // hlavné tlačidlá
+        // hlavné tlačidlá: červené (obrazovka) · fialové (zvuk) · modré (snímka)
         val recording = rec as? RecState.Recording
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val audio by AudioRecorderService.state.collectAsState()
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (recording == null) {
                 BigTile(
                     title = if (rec == RecState.Starting) tr("Spúšťam…", "Starting…") else tr("Nahrať", "Record"),
-                    subtitle = tr("celú obrazovku", "full screen"),
+                    subtitle = tr("obrazovku", "screen"),
                     icon = Icons.Filled.FiberManualRecord,
-                    filled = true,
                     modifier = Modifier.weight(1f),
                 ) { onCapture(CaptureMode.RECORD) }
             } else {
@@ -135,20 +141,29 @@ fun HomeScreen(
                     title = "Stop",
                     subtitle = if (recording.paused) tr("pozastavené", "paused") else tr("uložiť video", "save video"),
                     icon = Icons.Filled.Stop,
-                    filled = true,
                     modifier = Modifier.weight(1f),
                 ) { RecorderService.command(ctx, RecorderService.ACTION_STOP) }
             }
             BigTile(
+                title = if (audio == null) tr("Nahrať", "Record") else "Stop",
+                subtitle = if (audio == null) tr("zvuk", "audio") else tr("uložiť zvuk", "save audio"),
+                icon = if (audio == null) Icons.Filled.Mic else Icons.Filled.Stop,
+                color = C.PurpleFill,
+                modifier = Modifier.weight(1f),
+            ) { onCapture(CaptureMode.AUDIO) }
+            BigTile(
                 title = tr("Snímka", "Screenshot"),
                 subtitle = if (rec == RecState.ShotSession) tr("režim zapnutý", "mode on") else tr("obrazovky", "screen"),
                 icon = Icons.Filled.Screenshot,
-                filled = true,
                 color = C.BlueFill,
                 modifier = Modifier.weight(1f),
             ) { onCapture(CaptureMode.SHOT_SESSION) }
         }
 
+        audio?.let { a ->
+            Spacer(Modifier.height(12.dp))
+            AudioBar(a)
+        }
         if (recording != null) {
             Spacer(Modifier.height(12.dp))
             RecordingBar(recording)
@@ -304,34 +319,107 @@ private fun BigTile(
     title: String,
     subtitle: String,
     icon: ImageVector,
-    filled: Boolean,
     modifier: Modifier = Modifier,
     color: Color = C.Accent,
     onClick: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier
-            .height(78.dp)
+            .height(104.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(if (filled) color else C.Surface)
-            .then(if (filled) Modifier else Modifier.border(1.dp, C.Border, RoundedCornerShape(20.dp)))
+            .background(color)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         Box(
-            Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .background(if (filled) Color(0x33FFFFFF) else C.BlueSoft),
+            Modifier.size(40.dp).clip(CircleShape).background(Color(0x33FFFFFF)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = if (filled) Color.White else C.Blue, modifier = Modifier.size(24.dp))
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
         }
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = if (filled) Color(0xE6FFFFFF) else C.TextDim, fontSize = 12.sp, maxLines = 1)
+        Spacer(Modifier.height(6.dp))
+        Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(subtitle, color = Color(0xE6FFFFFF), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Fialový pruh počas nahrávania zvuku: čas, živá vlnovka, Pauza a Stop. */
+@Composable
+private fun AudioBar(s: AudioRecState) {
+    val ctx = LocalContext.current
+    val bars = remember { mutableStateListOf<Float>().apply { repeat(40) { add(0f) } } }
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = SystemClock.elapsedRealtime()
+            bars.removeAt(0)
+            bars.add(AudioRecorderService.level.value)
+            delay(100)
+        }
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(C.PurpleSoft)
+            .border(1.dp, C.PurpleBorder, RoundedCornerShape(18.dp))
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(if (s.paused) C.TextDim else Color(0xFFFF5A5A)))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                if (s.paused) tr("Pozastavené · mikrofón", "Paused · microphone") else tr("Nahrávam zvuk · mikrofón", "Recording audio · microphone"),
+                color = Color(0xFFD7C8FF), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
+            )
+            Text(formatDuration(s.elapsed(now)), color = C.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Row(
+            Modifier.fillMaxWidth().height(40.dp).padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            bars.forEach { v ->
+                val h = (4f + 32f * kotlin.math.sqrt(v)).dp
+                Box(Modifier.weight(1f).height(h).clip(RoundedCornerShape(2.dp)).background(C.Purple))
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier
+                    .weight(1f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF2A2244))
+                    .clickable {
+                        AudioRecorderService.command(
+                            ctx, if (s.paused) AudioRecorderService.ACTION_RESUME else AudioRecorderService.ACTION_PAUSE
+                        )
+                    },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(if (s.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause, contentDescription = null, tint = Color(0xFFD7C8FF), modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (s.paused) tr("Pokračovať", "Resume") else tr("Pauza", "Pause"), color = Color(0xFFD7C8FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Row(
+                Modifier
+                    .weight(1f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(C.PurpleFill)
+                    .clickable { AudioRecorderService.command(ctx, AudioRecorderService.ACTION_STOP) },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Stop, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(tr("Stop a uložiť", "Stop & save"), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

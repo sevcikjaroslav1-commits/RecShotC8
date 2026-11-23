@@ -21,7 +21,7 @@ import sk.vespal.recshot.ui.AppRoot
 import sk.vespal.recshot.ui.RecShotTheme
 
 /** SCREENSHOT = okamžitá snímka (dlaždica), SHOT_SESSION = režim snímok (tlačidlo v aplikácii). */
-enum class CaptureMode { RECORD, SCREENSHOT, SHOT_SESSION }
+enum class CaptureMode { RECORD, SCREENSHOT, SHOT_SESSION, AUDIO }
 
 sealed class Screen {
     data object Home : Screen()
@@ -65,6 +65,15 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this, tr("Bez povolenia na zvuk – video bude bez zvuku", "No audio permission – video will have no sound"), Toast.LENGTH_SHORT).show()
             }
             launchProjection(CaptureMode.RECORD)
+        }
+
+    private val audioPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                AudioRecorderService.command(this, AudioRecorderService.ACTION_START)
+            } else {
+                Toast.makeText(this, tr("Bez povolenia mikrofónu sa zvuk nedá nahrať", "Without microphone permission audio cannot be recorded"), Toast.LENGTH_LONG).show()
+            }
         }
 
     private val overlayPermission =
@@ -161,6 +170,26 @@ class MainActivity : ComponentActivity() {
 
     fun requestCapture(mode: CaptureMode) {
         val st = RecorderService.state.value
+        if (mode == CaptureMode.AUDIO) {
+            if (AudioRecorderService.state.value != null) {
+                AudioRecorderService.command(this, AudioRecorderService.ACTION_STOP)
+                return
+            }
+            if (st is RecState.Recording || st == RecState.Starting) {
+                Toast.makeText(this, tr("Najprv zastav nahrávanie obrazovky", "Stop the screen recording first"), Toast.LENGTH_SHORT).show()
+                return
+            }
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                return
+            }
+            AudioRecorderService.command(this, AudioRecorderService.ACTION_START)
+            return
+        }
+        if (mode == CaptureMode.RECORD && AudioRecorderService.state.value != null) {
+            Toast.makeText(this, tr("Najprv zastav nahrávanie zvuku", "Stop the audio recording first"), Toast.LENGTH_SHORT).show()
+            return
+        }
         if (mode != CaptureMode.RECORD && (st is RecState.Recording || st == RecState.ShotSession)) {
             if (st == RecState.ShotSession && mode == CaptureMode.SHOT_SESSION) {
                 Toast.makeText(this, tr("Režim snímok beží – ťukni na modré plávajúce tlačidlo", "Screenshot mode is on – tap the blue floating button"), Toast.LENGTH_LONG).show()

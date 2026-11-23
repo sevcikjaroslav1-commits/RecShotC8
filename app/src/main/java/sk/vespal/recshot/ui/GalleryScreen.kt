@@ -141,7 +141,8 @@ fun GalleryScreen(
         val sel = allItems.filter { it.uri in selected }
         return when {
             sel.isNotEmpty() && sel.all { it.isVideo } -> "video/*"
-            sel.isNotEmpty() && sel.none { it.isVideo } -> "image/*"
+            sel.isNotEmpty() && sel.all { it.isAudio } -> "audio/*"
+            sel.isNotEmpty() && sel.none { it.isVideo || it.isAudio } -> "image/*"
             else -> "*/*"
         }
     }
@@ -186,11 +187,7 @@ fun GalleryScreen(
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = {
-                        val visible = when (filter) {
-                            1 -> allItems.filter { it.isVideo }
-                            2 -> allItems.filter { !it.isVideo }
-                            else -> allItems
-                        }
+                        val visible = allItems.filter { matchesFilter(it, filter) }
                         visible.forEach { if (it.uri !in selected) selected.add(it.uri) }
                     }) {
                         Icon(Icons.Filled.SelectAll, contentDescription = tr("Vybrať všetko", "Select all"), tint = C.Text)
@@ -232,12 +229,9 @@ fun GalleryScreen(
                     Pill(tr("Všetko", "All"), filter == 0) { filter = 0 }
                     Pill(tr("Videá", "Videos"), filter == 1) { filter = 1 }
                     Pill(tr("Fotky", "Photos"), filter == 2) { filter = 2 }
+                    Pill(tr("Zvuk", "Audio"), filter == 3) { filter = 3 }
                 }
-                val shown = when (filter) {
-                    1 -> allItems.filter { it.isVideo }
-                    2 -> allItems.filter { !it.isVideo }
-                    else -> allItems
-                }
+                val shown = allItems.filter { matchesFilter(it, filter) }
                 if (shown.isNotEmpty() && !selecting) {
                     Text(
                         tr("Podrž prst na položke pre označenie a vymazanie", "Long-press an item to select, share or delete"),
@@ -246,7 +240,7 @@ fun GalleryScreen(
                 }
                 if (shown.isEmpty()) {
                     Text(
-                        tr("Tu sa zobrazia tvoje nahrávky a snímky obrazovky.", "Your recordings and screenshots will appear here."),
+                        tr("Tu sa zobrazia tvoje nahrávky, snímky a zvuky.", "Your recordings, screenshots and audio will appear here."),
                         color = C.TextDim, fontSize = 14.sp, modifier = Modifier.padding(top = 24.dp)
                     )
                 } else {
@@ -312,6 +306,13 @@ fun GalleryScreen(
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)
         )
     }
+}
+
+private fun matchesFilter(it: GalleryItem, filter: Int): Boolean = when (filter) {
+    1 -> it.isVideo
+    2 -> !it.isVideo && !it.isAudio
+    3 -> it.isAudio
+    else -> true
 }
 
 @Composable

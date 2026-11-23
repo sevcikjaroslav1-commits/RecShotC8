@@ -58,6 +58,11 @@
             android:foregroundServiceType="mediaProjection|microphone" />
 
         <service
+            android:name=".AudioRecorderService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <service
             android:name=".RecordTileService"
             android:exported="true"
             android:icon="@drawable/ic_stat_rec"

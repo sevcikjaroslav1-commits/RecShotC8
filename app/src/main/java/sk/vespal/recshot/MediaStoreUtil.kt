@@ -17,6 +17,7 @@ data class GalleryItem(
     val isVideo: Boolean,
     val dateAdded: Long,
     val durationMs: Long,
+    val isAudio: Boolean = false,
 )
 
 /** Ukladanie a načítanie nahrávok/snímok v priečinkoch Movies/RecShotC8 a Pictures/RecShotC8. */
@@ -31,6 +32,20 @@ object MediaStoreUtil {
 
     private val imageCollection: Uri
         get() = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+
+    private val audioCollection: Uri
+        get() = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+
+    /** Prázdny (skrytý) záznam pre zvukovú nahrávku v Music/RecShotC8. Po dokončení [publish]. */
+    fun newAudio(ctx: Context, prefix: String = "RecC8_zvuk"): Uri? {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "${prefix}_${stamp()}.m4a")
+            put(MediaStore.MediaColumns.MIME_TYPE, "audio/mp4")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/$FOLDER")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        return try { ctx.contentResolver.insert(audioCollection, values) } catch (_: Exception) { null }
+    }
 
     /** Vytvorí prázdny (zatiaľ skrytý) záznam pre video. Po dokončení zavolaj [publish]. */
     fun newVideo(ctx: Context, prefix: String = "RecShotC8"): Uri? {
@@ -139,6 +154,34 @@ object MediaStoreUtil {
                             isVideo = false,
                             dateAdded = c.getLong(dateCol),
                             durationMs = 0,
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        try {
+            ctx.contentResolver.query(
+                audioCollection,
+                arrayOf(
+                    MediaStore.MediaColumns._ID,
+                    MediaStore.MediaColumns.DATE_ADDED,
+                    MediaStore.MediaColumns.DURATION,
+                ),
+                selection, args, null
+            )?.use { c ->
+                val idCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val dateCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+                val durCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION)
+                while (c.moveToNext()) {
+                    items.add(
+                        GalleryItem(
+                            uri = ContentUris.withAppendedId(audioCollection, c.getLong(idCol)),
+                            isVideo = false,
+                            dateAdded = c.getLong(dateCol),
+                            durationMs = c.getLong(durCol),
+                            isAudio = true,
                         )
                     )
                 }

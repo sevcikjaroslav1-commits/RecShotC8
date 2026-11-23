@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -63,6 +65,12 @@ fun AppRoot(
     onBack: () -> Unit,
     onCapture: (CaptureMode) -> Unit,
 ) {
+    var audioUri by remember { mutableStateOf<Uri?>(null) }
+    audioUri?.let { u -> AudioPlayerDialog(u) { audioUri = null } }
+    val openItem: (GalleryItem) -> Unit = { item ->
+        if (item.isAudio) audioUri = item.uri
+        else onNavigate(if (item.isVideo) Screen.VideoEditor(item.uri) else Screen.ImageEditor(item.uri))
+    }
     when (screen) {
         is Screen.VideoEditor -> VideoEditorScreen(uri = screen.uri, onBack = onBack, onOpenGallery = { onTab(Screen.Gallery) })
         is Screen.ImageEditor -> ImageEditorScreen(uri = screen.uri, onBack = onBack)
@@ -96,13 +104,13 @@ fun AppRoot(
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 if (screen == Screen.Gallery) {
-                    GalleryScreen(onOpen = { openItem(it, onNavigate) }, onOpenUri = { uri, video ->
+                    GalleryScreen(onOpen = openItem, onOpenUri = { uri, video ->
                         onNavigate(if (video) Screen.VideoEditor(uri) else Screen.ImageEditor(uri))
                     })
                 } else {
                     HomeScreen(
                         onCapture = onCapture,
-                        onOpen = { openItem(it, onNavigate) },
+                        onOpen = openItem,
                         onOpenUri = { uri, video ->
                             onNavigate(if (video) Screen.VideoEditor(uri) else Screen.ImageEditor(uri))
                         },
@@ -114,9 +122,6 @@ fun AppRoot(
     }
 }
 
-private fun openItem(item: GalleryItem, onNavigate: (Screen) -> Unit) {
-    onNavigate(if (item.isVideo) Screen.VideoEditor(item.uri) else Screen.ImageEditor(item.uri))
-}
 
 /** Náhľad položky galérie (načítaný z MediaStore na pozadí). */
 @OptIn(ExperimentalFoundationApi::class)
@@ -132,6 +137,7 @@ fun Thumb(
     val ctx = LocalContext.current
     var bmp by remember(item.uri) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(item.uri) {
+        if (item.isAudio) return@LaunchedEffect
         bmp = withContext(Dispatchers.IO) {
             try {
                 ctx.contentResolver.loadThumbnail(item.uri, Size(360, 360), null).asImageBitmap()
@@ -143,14 +149,20 @@ fun Thumb(
     Box(
         modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(C.SurfaceHi)
+            .background(if (item.isAudio) Color(0xFF241C3A) else C.SurfaceHi)
             .border(
                 if (selected) 3.dp else 1.dp,
-                if (selected) C.Accent else Color(0xFF22252D),
+                if (selected) C.Accent else if (item.isAudio) Color(0xFF3A2F5E) else Color(0xFF22252D),
                 RoundedCornerShape(12.dp)
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
+        if (item.isAudio) {
+            Icon(
+                Icons.Filled.GraphicEq, contentDescription = null, tint = C.Purple,
+                modifier = Modifier.align(Alignment.Center).size(40.dp)
+            )
+        }
         bmp?.let {
             Image(bitmap = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
@@ -181,14 +193,14 @@ fun Thumb(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                if (item.isVideo) Icons.Filled.PlayArrow else Icons.Filled.Image,
+                if (item.isAudio) Icons.Filled.Mic else if (item.isVideo) Icons.Filled.PlayArrow else Icons.Filled.Image,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(12.dp)
             )
             Spacer(Modifier.width(3.dp))
             Text(
-                if (item.isVideo) formatDuration(item.durationMs) else "PNG",
+                if (item.isVideo || item.isAudio) formatDuration(item.durationMs) else "PNG",
                 color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold
             )
         }
