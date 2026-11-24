@@ -18,6 +18,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -224,6 +229,9 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
     // náhľad: true = prehráva sa celé pôvodné video (počas ťahania úchytov),
     // false = prehráva sa presne výsledok strihu (zostrihané úseky za sebou)
     var scrubbing by remember { mutableStateOf(false) }
+    // ťahanie zelenej čiary (prehrávacej pozície)
+    var draggingHead by remember { mutableStateOf(false) }
+    var dragHeadMs by remember { mutableLongStateOf(0L) }
     var segments by remember { mutableStateOf<List<LongRange>>(emptyList()) }
 
     val musicPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { picked ->
@@ -288,6 +296,35 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
         player.seekTo(atMs)
     }
 
+    /**
+     * Posunie prehrávanie na miesto [ms] v pôvodnom videu. Ak je to miesto vystrihnuté,
+     * použije najbližší ponechaný okraj. Vráti skutočnú pozíciu (v pôvodnom videu).
+     */
+    fun seekSource(ms: Long): Long {
+        val segs = segments
+        if (scrubbing || segs.isEmpty()) {
+            player.seekTo(ms)
+            return ms
+        }
+        val inside = segs.indexOfFirst { ms in it }
+        val (idx, off) = if (inside >= 0) {
+            inside to (ms - segs[inside].first)
+        } else {
+            var best = 0
+            var bestOff = 0L
+            var bestDist = Long.MAX_VALUE
+            segs.forEachIndexed { i, r ->
+                val dStart = kotlin.math.abs(ms - r.first)
+                val dEnd = kotlin.math.abs(ms - r.last)
+                if (dStart < bestDist) { bestDist = dStart; best = i; bestOff = 0L }
+                if (dEnd < bestDist) { bestDist = dEnd; best = i; bestOff = r.last - r.first }
+            }
+            best to bestOff
+        }
+        player.seekTo(idx, off)
+        return segs[idx].first + off
+    }
+
     // po načítaní dĺžky a pri zmene režimu strihu ukáž výsledok
     LaunchedEffect(durationMs, cutMiddle) {
         if (durationMs > 0) showResult()
@@ -306,7 +343,7 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                 before + player.currentPosition
             }
             // zelená čiara: miesto v pôvodnom videu
-            playheadMs = if (scrubbing) {
+            if (!draggingHead) playheadMs = if (scrubbing) {
                 player.currentPosition
             } else {
                 (segments.getOrNull(player.currentMediaItemIndex)?.first ?: 0L) + player.currentPosition
@@ -490,9 +527,10 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
             Modifier
                 .padding(horizontal = 36.dp)
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(88.dp)
                 .systemGestureExclusion()
         ) {
+          Box(Modifier.fillMaxWidth().height(64.dp).align(Alignment.BottomCenter)) {
             Row(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(C.SurfaceHi)) {
                 thumbs.forEach { t ->
                     Image(
@@ -543,20 +581,56 @@ fun VideoEditorScreen(uri: Uri, onBack: () -> Unit, onOpenGallery: () -> Unit) {
                     )
                 }
             }
-            // zelená čiara = aktuálne prehrávané miesto
+          }
+            // zelená čiara = aktuálne prehrávané miesto; dá sa chytiť a posúvať
             if (durationMs > 0) {
-                val frac = (playheadMs.toFloat() / durationMs).coerceIn(0f, 1f)
-                Box(Modifier.fillMaxSize().padding(horizontal = 9.dp)) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(frac)) {
-                        Box(
-                            Modifier
-                                .align(Alignment.CenterEnd)
-                                .width(3.dp)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(C.PlayGreen)
-                        )
+                BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 9.dp)) {
+                    val density = LocalDensity.current
+                    val trackPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+                    val frac = (playheadMs.toFloat() / durationMs).coerceIn(0f, 1f)
+                    val x = frac * trackPx
+                    // pri žltom úchyte sa dá zelená čiara chytiť len za guličku hore
+                    val near = with(density) {
+                        val t = 26.dp.toPx()
+                        kotlin.math.abs(frac - range.start) * trackPx < t ||
+                            kotlin.math.abs(frac - range.endInclusive) * trackPx < t
                     }
+                    Box(
+                        Modifier
+                            .offset { IntOffset((x - 1.5.dp.toPx()).roundToInt(), 16.dp.roundToPx()) }
+                            .width(3.dp)
+                            .height(72.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(C.PlayGreen)
+                    )
+                    Box(
+                        Modifier
+                            .offset { IntOffset((x - 10.dp.toPx()).roundToInt(), 0) }
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(if (draggingHead) Color.White else C.PlayGreen)
+                    )
+                    Box(
+                        Modifier
+                            .offset { IntOffset((x - 22.dp.toPx()).roundToInt(), 0) }
+                            .width(44.dp)
+                            .height(if (near && !draggingHead) 24.dp else 88.dp)
+                            .pointerInput(durationMs, trackPx) {
+                                detectHorizontalDragGestures(
+                                    onDragStart = {
+                                        draggingHead = true
+                                        dragHeadMs = playheadMs
+                                        player.pause()
+                                    },
+                                    onDragEnd = { draggingHead = false },
+                                    onDragCancel = { draggingHead = false },
+                                ) { change, dx ->
+                                    change.consume()
+                                    dragHeadMs = (dragHeadMs + (dx / trackPx * durationMs).toLong()).coerceIn(0L, durationMs)
+                                    playheadMs = seekSource(dragHeadMs)
+                                }
+                            }
+                    )
                 }
             }
         }
