@@ -91,6 +91,25 @@ object MediaStoreUtil {
         }
     }
 
+    /** Uloží hotové JPEG dáta do Pictures/RecShotC8. */
+    fun saveJpeg(ctx: Context, bytes: ByteArray, prefix: String): Uri? {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "${prefix}_${stamp()}.jpg")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/$FOLDER")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = ctx.contentResolver.insert(imageCollection, values) ?: return null
+        return try {
+            ctx.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: throw IllegalStateException("no stream")
+            publish(ctx, uri)
+            uri
+        } catch (e: Exception) {
+            delete(ctx, uri)
+            null
+        }
+    }
+
     /** Skopíruje hotový súbor (napr. export z editora) do Movies/RecShotC8. */
     fun copyVideoToGallery(ctx: Context, file: File, prefix: String = "RecShotC8_edit"): Uri? {
         val uri = newVideo(ctx, prefix) ?: return null

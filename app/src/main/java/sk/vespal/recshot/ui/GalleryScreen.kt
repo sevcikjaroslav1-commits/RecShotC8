@@ -150,7 +150,9 @@ fun GalleryScreen(
     var compressUri by remember { mutableStateOf<Uri?>(null) }
     if (showNearby) NearbyDialog(selected.toList(), selectedMime()) { showNearby = false }
     compressUri?.let { u ->
-        CompressDialog(u, onDismiss = { compressUri = null; selected.clear() })
+        val isVid = allItems.any { it.uri == u && it.isVideo }
+        if (isVid) CompressDialog(u, onDismiss = { compressUri = null; selected.clear() })
+        else ImageCompressDialog(u, onDismiss = { compressUri = null; selected.clear() })
     }
 
     LaunchedEffect(saved) {
@@ -198,8 +200,8 @@ fun GalleryScreen(
                     IconButton(onClick = { showNearby = true }) {
                         Icon(Icons.Filled.Bluetooth, contentDescription = tr("Poslať cez Wi-Fi / Bluetooth", "Send via Wi-Fi / Bluetooth"), tint = C.Text)
                     }
-                    val singleVideo = selected.size == 1 && allItems.any { it.uri == selected[0] && it.isVideo }
-                    if (singleVideo) {
+                    val singleShrinkable = selected.size == 1 && allItems.any { it.uri == selected[0] && !it.isAudio }
+                    if (singleShrinkable) {
                         IconButton(onClick = { compressUri = selected[0] }) {
                             Icon(Icons.Filled.Compress, contentDescription = tr("Komprimovať", "Compress"), tint = C.Text)
                         }

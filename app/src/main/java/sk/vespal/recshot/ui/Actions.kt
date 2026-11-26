@@ -63,6 +63,9 @@ import sk.vespal.recshot.MediaStoreUtil
 import sk.vespal.recshot.RecorderService
 import java.io.File
 import kotlin.math.max
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableLongStateOf
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -230,13 +233,23 @@ private class Preset(val title: String, val note: String, val shortSide: Int, va
 
 private fun presetsFor(info: SourceInfo, hevc: Boolean): List<Preset> {
     val short = min(info.width, info.height).takeIf { it > 0 } ?: 1080
-    val f = if (hevc) 1f else 1.4f // H.264 potrebuje vyšší dátový tok na rovnakú kvalitu
-    val origVideoBr = max(1_000_000, info.bitrate - 160_000)
-    val high = min((origVideoBr * 0.5f).toInt(), (6_000_000 * f).toInt())
+    // skutočný dátový tok videa (nahrávky obrazovky bývajú vďaka statickému obrazu veľmi úsporné,
+    // preto sa cieľ počíta vždy z pôvodného toku – aby bol výsledok naozaj menší)
+    val orig = max(400_000, info.bitrate - 128_000)
+    val codec = if (hevc) 1f else 1.25f
     return listOf(
-        Preset(tr("Vysoká kvalita", "High quality"), tr("Rovnaké rozlíšenie, menší súbor", "Same resolution, smaller file"), short, max(1_500_000, high)),
-        Preset(tr("Vyvážená", "Balanced"), tr("Do 1080p – ideálne na WhatsApp a e-mail", "Up to 1080p – ideal for WhatsApp and e-mail"), min(short, 1080), (3_000_000 * f).toInt()),
-        Preset(tr("Malý súbor", "Small file"), tr("720p – najmenšia veľkosť", "720p – smallest size"), min(short, 720), (1_500_000 * f).toInt()),
+        Preset(
+            tr("Vysoká kvalita", "High quality"), tr("Rovnaké rozlíšenie, menší súbor", "Same resolution, smaller file"),
+            short, max(300_000, (orig * 0.6f * codec).toInt().coerceAtMost((orig * 0.7f).toInt()))
+        ),
+        Preset(
+            tr("Vyvážená", "Balanced"), tr("Do 1080p – ideálne na WhatsApp a e-mail", "Up to 1080p – ideal for WhatsApp and e-mail"),
+            min(short, 1080), max(250_000, (orig * 0.4f).toInt())
+        ),
+        Preset(
+            tr("Malý súbor", "Small file"), tr("Do 720p – najmenšia veľkosť", "Up to 720p – smallest size"),
+            min(short, 720), max(200_000, (orig * 0.22f).toInt())
+        ),
     )
 }
 
@@ -304,7 +317,14 @@ fun CompressDialog(uri: Uri, onDismiss: () -> Unit, onDone: (Uri) -> Unit = {}) 
                                     .clickable {
                                         chosen = i
                                         running = true
-                                        transformer = compressVideo(ctx, uri, inf, p, hevc) { saved ->
+                                        transformer = compressVideo(ctx, uri, inf, p, hevc, onNotSmaller = {
+                                            transformer = null
+                                            running = false
+                                            resultText = tr(
+                                                "Video je už dobre skomprimované – pri tejto voľbe by nebolo menšie.\nSkús „Malý súbor“.",
+                                                "The video is already well compressed – this option would not make it smaller.\nTry “Small file”."
+                                            )
+                                        }) { saved ->
                                             transformer = null
                                             running = false
                                             if (saved != null) {
@@ -348,6 +368,7 @@ private fun compressVideo(
     info: SourceInfo,
     preset: Preset,
     hevc: Boolean,
+    onNotSmaller: () -> Unit,
     onDone: (Uri?) -> Unit,
 ): Transformer {
     val app = ctx.applicationContext
@@ -379,7 +400,13 @@ private fun compressVideo(
         .addListener(object : Transformer.Listener {
             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                 Thread {
-                    val saved = MediaStoreUtil.copyVideoToGallery(app, out, "RecShotC8_mensie")
+                    // ak by výsledok nebol menší, neukladáme zbytočnú kópiu
+                    if (info.sizeBytes > 0 && out.length() >= info.sizeBytes * 97 / 100) {
+                        out.delete()
+                        main.post { onNotSmaller() }
+                        return@Thread
+                    }
+                    val saved = MediaStoreUtil.copyVideoToGallery(app, out, "RecC8_mensie")
                     out.delete()
                     main.post { onDone(saved) }
                 }.start()
@@ -405,4 +432,127 @@ fun fileSizeOf(ctx: Context, uri: Uri): Long = try {
     } ?: 0L
 } catch (_: Exception) {
     0L
+}
+
+
+// ============================================================ zmenšenie fotky
+
+private class ImgPreset(val title: String, val note: String, val maxSide: Int, val quality: Int)
+
+/** Dialóg zmenšenia fotky: uloží menšiu kópiu ako JPEG do Pictures/RecShotC8. */
+@Composable
+fun ImageCompressDialog(uri: Uri, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var size by remember { mutableLongStateOf(0L) }
+    var dims by remember { mutableStateOf(0 to 0) }
+    var running by remember { mutableStateOf(false) }
+    var resultText by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(uri) {
+        withContext(Dispatchers.IO) {
+            size = fileSizeOf(ctx, uri)
+            try {
+                val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                ctx.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+                dims = o.outWidth to o.outHeight
+            } catch (_: Exception) {
+            }
+        }
+    }
+    val long = max(dims.first, dims.second)
+    val presets = listOf(
+        ImgPreset(tr("Vysoká kvalita", "High quality"), tr("Rovnaké rozlíšenie, JPEG 90 %", "Same resolution, JPEG 90%"), long.takeIf { it > 0 } ?: 4096, 90),
+        ImgPreset(tr("Vyvážená", "Balanced"), tr("Max. 1920 px – na WhatsApp a e-mail", "Max 1920 px – for WhatsApp and e-mail"), 1920, 80),
+        ImgPreset(tr("Malý súbor", "Small file"), tr("Max. 1280 px – najmenšia veľkosť", "Max 1280 px – smallest size"), 1280, 70),
+    )
+
+    AlertDialog(
+        onDismissRequest = { if (!running) onDismiss() },
+        containerColor = C.Surface,
+        title = { Text(tr("Zmenšiť fotku", "Shrink photo"), color = C.Text) },
+        text = {
+            Column {
+                when {
+                    resultText != null -> Text(resultText!!, color = C.Text, fontSize = 15.sp, lineHeight = 21.sp)
+                    running -> {
+                        Text(tr("Zmenšujem…", "Shrinking…"), color = C.Text)
+                        Spacer(Modifier.height(10.dp))
+                        LinearProgressIndicator(color = C.Accent, trackColor = C.SurfaceHi, modifier = Modifier.fillMaxWidth())
+                    }
+                    else -> {
+                        Text(
+                            tr("Teraz: ", "Now: ") + formatMb(size) + if (long > 0) " · ${dims.first} × ${dims.second}" else "",
+                            color = C.TextDim, fontSize = 13.sp
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        presets.forEach { p ->
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(C.SurfaceHi)
+                                    .border(1.dp, C.Border, RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        running = true
+                                        scope.launch {
+                                            val saved = withContext(Dispatchers.IO) { shrinkImage(ctx, uri, p.maxSide, p.quality, size) }
+                                            running = false
+                                            resultText = when {
+                                                saved == null -> tr("Zmenšenie sa nepodarilo.", "Shrinking failed.")
+                                                saved.second -> tr("Fotka je už malá – pri tejto voľbe by nebola menšia.\nSkús „Malý súbor“.", "The photo is already small – this option would not make it smaller.\nTry “Small file”.")
+                                                else -> {
+                                                    RecorderService.savedCounter.value = RecorderService.savedCounter.value + 1
+                                                    tr("Hotovo ✓\n${formatMb(size)} → ${formatMb(saved.third)}\nUložené v Galéria › RecShotC8",
+                                                        "Done ✓\n${formatMb(size)} → ${formatMb(saved.third)}\nSaved in Gallery › RecShotC8")
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                            ) {
+                                Text(p.title, color = C.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                Text(p.note, color = C.TextDim, fontSize = 12.sp)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (!running) TextButton(onClick = onDismiss) { Text(if (resultText != null) "OK" else tr("Zavrieť", "Close")) }
+        },
+    )
+}
+
+/** Vráti (uri, nebolaMenšia, novúVeľkosť) alebo null pri chybe. */
+private fun shrinkImage(ctx: Context, uri: Uri, maxSide: Int, quality: Int, origSize: Long): Triple<Uri?, Boolean, Long>? {
+    return try {
+        val src = android.graphics.ImageDecoder.createSource(ctx.contentResolver, uri)
+        val bmp = android.graphics.ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
+            decoder.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            val w = info.size.width
+            val h = info.size.height
+            val longSide = max(w, h)
+            if (longSide > maxSide) {
+                val f = maxSide.toFloat() / longSide
+                decoder.setTargetSize((w * f).roundToInt().coerceAtLeast(1), (h * f).roundToInt().coerceAtLeast(1))
+            }
+        }
+        val buf = java.io.ByteArrayOutputStream()
+        // priehľadnosť JPEG nepozná – podklad vyplníme bielou
+        val flat = if (bmp.hasAlpha()) {
+            android.graphics.Bitmap.createBitmap(bmp.width, bmp.height, android.graphics.Bitmap.Config.ARGB_8888).also { b ->
+                android.graphics.Canvas(b).apply { drawColor(android.graphics.Color.WHITE); drawBitmap(bmp, 0f, 0f, null) }
+            }
+        } else bmp
+        flat.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, buf)
+        val bytes = buf.toByteArray()
+        if (origSize > 0 && bytes.size >= origSize * 97 / 100) return Triple(null, true, bytes.size.toLong())
+        val saved = MediaStoreUtil.saveJpeg(ctx, bytes, "RecC8_mensie") ?: return null
+        Triple(saved, false, bytes.size.toLong())
+    } catch (_: Exception) {
+        null
+    }
 }
